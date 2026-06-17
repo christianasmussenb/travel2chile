@@ -213,6 +213,7 @@ export default function ChatInterface() {
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             onClick={clearChat}
+            aria-label="Nueva conversación"
             style={{
               fontSize: 12, fontWeight: 500,
               color: '#94A3B8',
@@ -453,12 +454,13 @@ export default function ChatInterface() {
                 fontFamily: 'inherit',
               }}
             />
-            <button
-              onClick={() => sendMessage(input)}
-              disabled={isStreaming || !input.trim()}
-              style={{
-                width: 40, height: 40, borderRadius: 10, border: 'none',
-                background: isStreaming || !input.trim()
+          <button
+            onClick={() => sendMessage(input)}
+            disabled={isStreaming || !input.trim()}
+            aria-label="Enviar mensaje"
+            style={{
+              width: 40, height: 40, borderRadius: 10, border: 'none',
+              background: isStreaming || !input.trim()
                   ? 'rgba(255,255,255,0.07)'
                   : `linear-gradient(135deg, ${accent} 0%, #A01E17 100%)`,
                 color: isStreaming || !input.trim() ? '#475569' : '#fff',

@@ -50,6 +50,7 @@ Travel2Chile es un asistente de viajes en español enfocado en Chile. La aplicac
 - `npm run start`: inicia la build de producción de Next.js.
 - `npm run lint`: ejecuta ESLint sobre el repositorio.
 - `npm run test`: ejecuta la suite de pruebas.
+- `npm run test:ui`: ejecuta el smoke test de Playwright.
 - `npm run preview`: construye y ejecuta preview con OpenNext/Cloudflare.
 - `npm run deploy`: construye y despliega a Cloudflare.
 - `npm run upload`: construye y sube artefactos a Cloudflare.
