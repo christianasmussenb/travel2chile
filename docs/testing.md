@@ -23,6 +23,7 @@ Este documento define la verificación mínima para considerar estable a Travel2
 
 - `npm run build` termina sin errores.
 - `npm run lint` termina sin errores.
+- `npm run test` termina sin errores.
 - `GET /chat` carga la interfaz sin errores visuales o de consola críticos.
 - `POST /api/chat` devuelve una respuesta SSE válida.
 - `GET /api/history` devuelve historial cuando hay D1.
@@ -68,6 +69,7 @@ Ejecutar:
 ```bash
 npm run build
 npm run lint
+npm run test
 ```
 
 Luego validar manualmente:
@@ -101,4 +103,3 @@ En preview o despliegue real:
 - La API externa puede responder lento o fallar.
 - En local sin bindings, la experiencia es correcta pero sin persistencia real.
 - El lint debe ejecutarse con ESLint directo, no con `next lint`.
-
