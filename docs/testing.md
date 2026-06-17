@@ -99,6 +99,7 @@ En preview o despliegue real:
 - Tests de API para `src/app/api/chat/route.ts` y `src/app/api/history/route.ts`.
 - Smoke test de UI para landing + chat.
 - Smoke test de UI con Playwright para landing + chat.
+- CI en GitHub Actions ejecutando `lint`, `test` y `test:ui` en cada `push` a `main` y en cada `pull_request`.
 - Un caso end-to-end en preview Cloudflare.
 
 ## Riesgos conocidos

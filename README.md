@@ -107,3 +107,4 @@ El esquema completo está en [`db/schema.sql`](/Users/cab/VSCODE/travel2chile/db
 ## Pruebas y verificación
 
 La guía de pruebas está en [`docs/testing.md`](/Users/cab/VSCODE/travel2chile/docs/testing.md).
+El repositorio ejecuta `lint`, `test` y `test:ui` en GitHub Actions para `push` a `main` y `pull_request`.
