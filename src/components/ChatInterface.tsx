@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
@@ -141,7 +142,6 @@ export default function ChatInterface() {
   const surface = 'rgba(255,255,255,0.04)'
   const border = 'rgba(255,255,255,0.09)'
   const accent = '#D52B1E'
-  const accentLight = '#FF4444'
 
   return (
     <div style={{
@@ -226,7 +226,7 @@ export default function ChatInterface() {
           >
             + Nueva conversación
           </button>
-          <a
+          <Link
             href="/"
             style={{
               fontSize: 12, fontWeight: 500,
@@ -242,7 +242,7 @@ export default function ChatInterface() {
             onMouseOut={(e) => { (e.currentTarget.style.color = '#94A3B8'); (e.currentTarget.style.borderColor = border) }}
           >
             ← Inicio
-          </a>
+          </Link>
         </div>
       </div>
 
