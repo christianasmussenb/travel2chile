@@ -92,6 +92,7 @@ En preview o despliegue real:
 4. Recargar la página.
 5. Confirmar que el historial reaparece.
 6. Vaciar la conversación y confirmar que el historial se elimina.
+7. Confirmar en Cloudflare que el Worker muestra trazas de observabilidad y que, si el token de Web Analytics está configurado, aparecen visitas de página.
 
 ## Automatización recomendada
 

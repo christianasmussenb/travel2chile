@@ -2,6 +2,13 @@
 
 Travel2Chile es un asistente de viajes en español enfocado en Chile. La aplicación combina una landing pública, un chat con streaming, persistencia de conversaciones por sesión y despliegue sobre Next.js + OpenNext para Cloudflare.
 
+## Documentación
+
+- [`docs/status.md`](/Users/cab/VSCODE/travel2chile/docs/status.md): avances, estado actual y pendientes.
+- [`docs/lessons-learned.md`](/Users/cab/VSCODE/travel2chile/docs/lessons-learned.md): aprendizajes técnicos y operativos.
+- [`docs/sprints.md`](/Users/cab/VSCODE/travel2chile/docs/sprints.md): plan de sprints.
+- [`docs/testing.md`](/Users/cab/VSCODE/travel2chile/docs/testing.md): estrategia de pruebas y verificación.
+
 ## Qué resuelve
 
 - Ayuda a planificar viajes por Chile con respuestas prácticas sobre destinos, temporadas, transporte, alojamiento y costos.
@@ -42,6 +49,7 @@ Travel2Chile es un asistente de viajes en español enfocado en Chile. La aplicac
 
 - `OPENROUTER_API_KEY`: obligatoria para responder mensajes.
 - `NEXTJS_ENV`: opcional, usada por el runtime de OpenNext/Cloudflare.
+- `CLOUDFLARE_WEB_ANALYTICS_TOKEN`: opcional, habilita Web Analytics de Cloudflare en el frontend.
 
 ## Scripts
 
@@ -87,6 +95,45 @@ Abrir `http://localhost:3000`.
 
 - `npm run preview` levanta el bundle de OpenNext para validación local del runtime Cloudflare.
 - `npm run deploy` publica en Cloudflare cuando los bindings y secretos están configurados.
+
+### Despliegue en Cloudflare
+
+1. Inicia sesión en Cloudflare en tu máquina local:
+
+```bash
+npx wrangler login
+```
+
+2. Verifica que existan los bindings remotos definidos en [`wrangler.jsonc`](/Users/cab/VSCODE/travel2chile/wrangler.jsonc):
+- D1 para `travel2chile_db`
+- KV para `travel2chile_kv`
+- R2 para `travel2chile_images`
+
+3. Carga el secreto de OpenRouter en Cloudflare:
+
+```bash
+npx wrangler secret put OPENROUTER_API_KEY
+```
+
+4. Si quieres ver métricas de navegación en Cloudflare Web Analytics, agrega el token público como variable de entorno `CLOUDFLARE_WEB_ANALYTICS_TOKEN`.
+
+5. Construye y despliega:
+
+```bash
+npm run deploy
+```
+
+6. Para validar antes del despliegue, usa:
+
+```bash
+npm run preview
+```
+
+## Observabilidad en Cloudflare
+
+- `observability.enabled` ya está activado en [`wrangler.jsonc`](/Users/cab/VSCODE/travel2chile/wrangler.jsonc), así que Cloudflare puede registrar trazas del Worker y sus invocaciones.
+- Cuando `CLOUDFLARE_WEB_ANALYTICS_TOKEN` está definido, la app inyecta el beacon de Cloudflare Web Analytics y reporta tráfico de página desde el navegador.
+- Para ver trazas de uso completas conviene usar ambas capas: observabilidad del Worker y Web Analytics del frontend.
 
 ## Esquema de datos
 
