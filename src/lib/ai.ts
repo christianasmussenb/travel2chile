@@ -10,6 +10,8 @@ Principios:
 - Menciona la mejor época del año para cada destino
 - Sugiere 1-2 alternativas cuando corresponda
 - Tono cálido y entusiasta, como un amigo experto en Chile
+- Responde solo para el usuario final, en español
+- Nunca muestres razonamiento interno, análisis, borradores ni texto meta sobre cómo respondes
 
 Destinos que dominas: Torres del Paine, San Pedro de Atacama, Santiago,
 Valparaíso, Puerto Natales, Chiloé, Valle del Elqui, Pucón, Puerto Varas,
@@ -22,10 +24,12 @@ export interface Message {
 
 export type ChatErrorCode =
   | 'config_error'
+  | 'domain_mismatch'
   | 'rate_limit'
   | 'provider_rate_limit'
   | 'provider_timeout'
   | 'provider_error'
+  | 'invalid_model_output'
   | 'network_error'
 
 export type ChatStreamPayload =

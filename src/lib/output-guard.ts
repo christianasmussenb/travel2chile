@@ -1,0 +1,216 @@
+import { createErrorPayload, type ChatStreamPayload } from './ai'
+
+const REASONING_PATTERNS = [
+  'okay, the user is asking',
+  'let me check the conversation history',
+  'i need to recall',
+  'i should structure the answer',
+  'let me outline',
+  'based on standard responses',
+]
+
+const SUSPICIOUS_ENDINGS = [
+  '\t$',
+  '\n$',
+  '\nC',
+  'let me outline:',
+  'desayuno: si tu alojamiento incluye desayuno',
+]
+
+const CORRUPTION_PATTERNS = [
+  '€16/europa',
+  'treasury de trastevere',
+  'biciculto',
+  'paraoctavo',
+  '€25ida',
+  'rki',
+]
+
+function encodeSseChunk(payload: ChatStreamPayload | '[DONE]') {
+  return new TextEncoder().encode(`data: ${typeof payload === 'string' ? payload : JSON.stringify(payload)}\n\n`)
+}
+
+function parseSseLine(line: string): ChatStreamPayload | null {
+  if (!line.startsWith('data: ') || line.includes('[DONE]')) return null
+
+  try {
+    const payload = JSON.parse(line.slice(6)) as
+      | ChatStreamPayload
+      | { text?: string; error?: string }
+
+    if ('type' in payload) return payload
+    if (payload.text) return { type: 'text', text: payload.text }
+    if (payload.error) {
+      return createErrorPayload('provider_error', payload.error, true)
+    }
+  } catch {
+    return null
+  }
+
+  return null
+}
+
+function looksLikeReasoningLeak(text: string) {
+  const normalized = text.toLowerCase()
+  return REASONING_PATTERNS.some((pattern) => normalized.includes(pattern))
+}
+
+function looksTruncated(text: string) {
+  const trimmed = text.trimEnd()
+  if (trimmed.length < 40) return false
+  return SUSPICIOUS_ENDINGS.some((ending) => trimmed.endsWith(ending))
+}
+
+function looksCorrupted(text: string) {
+  const normalized = text.toLowerCase()
+
+  if (CORRUPTION_PATTERNS.some((pattern) => normalized.includes(pattern))) {
+    return true
+  }
+
+  // Detect mixed Cyrillic snippets inside otherwise Latin text.
+  if (/[Ѐ-ӿ]/u.test(text)) {
+    return true
+  }
+
+  // Detect malformed euro references that shouldn't appear in this product copy.
+  if (/€\d+[a-z]/i.test(text) || /€\d+\/[a-z]/i.test(text)) {
+    return true
+  }
+
+  return false
+}
+
+export function guardChatStream(stream: ReadableStream) {
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const reader = stream.getReader()
+      const decoder = new TextDecoder()
+      let accumulated = ''
+      let bufferedText = ''
+      let bufferReleased = false
+      let blocked = false
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value)
+        for (const line of chunk.split('\n')) {
+          if (line === 'data: [DONE]') {
+            if (!blocked && bufferedText && !looksTruncated(accumulated)) {
+              controller.enqueue(encodeSseChunk({ type: 'text', text: bufferedText }))
+              bufferedText = ''
+            }
+
+            if (!blocked && looksTruncated(accumulated)) {
+              blocked = true
+              controller.enqueue(
+                encodeSseChunk(
+                  createErrorPayload(
+                    'invalid_model_output',
+                    'La respuesta del modelo llegó incompleta. Intenta nuevamente.',
+                    true
+                  )
+                )
+              )
+            }
+
+            controller.enqueue(encodeSseChunk('[DONE]'))
+            controller.close()
+            return
+          }
+
+          const payload = parseSseLine(line)
+          if (!payload) continue
+
+          if (payload.type === 'error') {
+            controller.enqueue(encodeSseChunk(payload))
+            continue
+          }
+
+          accumulated += payload.text
+          bufferedText += payload.text
+
+          if (looksLikeReasoningLeak(accumulated)) {
+            blocked = true
+            controller.enqueue(
+              encodeSseChunk(
+                createErrorPayload(
+                  'invalid_model_output',
+                  'El modelo devolvió una respuesta inválida. Intenta nuevamente.',
+                  true
+                )
+              )
+            )
+            controller.enqueue(encodeSseChunk('[DONE]'))
+            controller.close()
+            return
+          }
+
+          if (looksCorrupted(accumulated)) {
+            blocked = true
+            controller.enqueue(
+              encodeSseChunk(
+                createErrorPayload(
+                  'invalid_model_output',
+                  'El modelo devolvió contenido inconsistente. Intenta nuevamente.',
+                  true
+                )
+              )
+            )
+            controller.enqueue(encodeSseChunk('[DONE]'))
+            controller.close()
+            return
+          }
+
+          if (!bufferReleased) {
+            const shouldRelease =
+              bufferedText.length >= 120 ||
+              /[.!?]\s$/.test(bufferedText) ||
+              bufferedText.includes('\n')
+
+            if (!shouldRelease) continue
+
+            bufferReleased = true
+            controller.enqueue(encodeSseChunk({ type: 'text', text: bufferedText }))
+            bufferedText = ''
+            continue
+          }
+
+          controller.enqueue(encodeSseChunk({ type: 'text', text: payload.text }))
+        }
+      }
+
+      if (!blocked) {
+        if (bufferedText) {
+          controller.enqueue(encodeSseChunk({ type: 'text', text: bufferedText }))
+        }
+        if (looksTruncated(accumulated)) {
+          controller.enqueue(
+            encodeSseChunk(
+              createErrorPayload(
+                'invalid_model_output',
+                'La respuesta del modelo llegó incompleta. Intenta nuevamente.',
+                true
+              )
+            )
+          )
+        }
+        if (looksCorrupted(accumulated)) {
+          controller.enqueue(
+            encodeSseChunk(
+              createErrorPayload(
+                'invalid_model_output',
+                'El modelo devolvió contenido inconsistente. Intenta nuevamente.',
+                true
+              )
+            )
+          )
+        }
+        controller.enqueue(encodeSseChunk('[DONE]'))
+      }
+      controller.close()
+    },
+  })
+}

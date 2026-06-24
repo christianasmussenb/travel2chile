@@ -2,6 +2,8 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { createChatStream, createErrorPayload, type ChatStreamPayload } from '@/lib/ai'
 import { getOrCreateConversation, getHistory, saveMessage } from '@/lib/db'
 import { toIpHashHint, trackAppEvent } from '@/lib/observability'
+import { guardChatStream } from '@/lib/output-guard'
+import { getDomainMismatchPayload } from '@/lib/domain-guard'
 
 function createSseResponse(payload: ChatStreamPayload, status: number) {
   return new Response(`data: ${JSON.stringify(payload)}\n\ndata: [DONE]\n\n`, {
@@ -84,6 +86,19 @@ export async function POST(request: Request) {
   })
 
   const messages = [...history, { role: 'user' as const, content: message }]
+  const domainMismatchPayload = getDomainMismatchPayload(message)
+
+  if (domainMismatchPayload) {
+    trackAppEvent('chat_provider_error', {
+      sessionId,
+      conversationId,
+      errorCode: 'domain_mismatch',
+      retryable: false,
+      provider: 'openrouter',
+      hasBindings: Boolean(db || kv),
+    })
+    return createSseResponse(domainMismatchPayload, 400)
+  }
 
   if (!apiKey) {
     trackAppEvent('chat_provider_error', {
@@ -105,7 +120,8 @@ export async function POST(request: Request) {
   }
 
   // Tee the stream: one for the client, one for saving to D1
-  const [streamForClient, streamForSaving] = createChatStream(messages, apiKey).tee()
+  const guardedStream = guardChatStream(createChatStream(messages, apiKey))
+  const [streamForClient, streamForSaving] = guardedStream.tee()
 
   // Save assistant response in background (only if D1 available)
   if (db && conversationId) {

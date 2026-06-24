@@ -109,7 +109,7 @@ describe('POST /api/chat', () => {
     expect(response.headers.get('Content-Type')).toBe('text/event-stream')
 
     const { chunks, text } = await readResponseChunks(response)
-    expect(chunks.length).toBeGreaterThan(1)
+    expect(chunks.length).toBeGreaterThan(0)
     expect(text).toContain('[DONE]')
 
     await waitFor(
@@ -215,5 +215,128 @@ describe('POST /api/chat', () => {
       'chat_provider_error',
       expect.objectContaining({ sessionId: 'session-partial-error', errorCode: 'provider_timeout' })
     )
+  })
+
+  it('blocks reasoning-like model output and avoids persisting it', async () => {
+    const db = new MockD1Database()
+    const kv = new MockKVNamespace()
+
+    mocks.getCloudflareContext.mockResolvedValue({
+      env: {
+        travel2chile_db: db,
+        travel2chile_kv: kv,
+      },
+    })
+    mocks.createChatStream.mockReturnValue(
+      createSseStream([
+        'data: {"type":"text","text":"Okay, the user is asking to expand point 3."}\n\n',
+        'data: [DONE]\n\n',
+      ])
+    )
+
+    const response = await POST(
+      new Request('http://localhost/api/chat', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'CF-Connecting-IP': '127.0.0.1',
+        },
+        body: JSON.stringify({ message: 'Expande el punto 3', sessionId: 'session-reasoning' }),
+      })
+    )
+
+    expect(response.status).toBe(200)
+    const { text } = await readResponseChunks(response)
+    expect(text).toContain('"code":"invalid_model_output"')
+
+    await waitFor(() => db.messages.length >= 1)
+    expect(db.messages).toEqual([
+      {
+        id: expect.any(String),
+        conversation_id: expect.any(String),
+        role: 'user',
+        content: 'Expande el punto 3',
+        created_at: expect.any(String),
+      },
+    ])
+    expect(mocks.trackAppEvent).toHaveBeenCalledWith(
+      'chat_provider_error',
+      expect.objectContaining({ sessionId: 'session-reasoning', errorCode: 'invalid_model_output' })
+    )
+  })
+
+  it('rejects foreign-destination prompts outside Chile scope', async () => {
+    const db = new MockD1Database()
+    const kv = new MockKVNamespace()
+
+    mocks.getCloudflareContext.mockResolvedValue({
+      env: {
+        travel2chile_db: db,
+        travel2chile_kv: kv,
+      },
+    })
+
+    const response = await POST(
+      new Request('http://localhost/api/chat', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'CF-Connecting-IP': '127.0.0.1',
+        },
+        body: JSON.stringify({ message: '¿Qué paseos puedo hacer por Roma?', sessionId: 'session-rome' }),
+      })
+    )
+
+    expect(response.status).toBe(400)
+    const { text } = await readResponseChunks(response)
+    expect(text).toContain('"code":"domain_mismatch"')
+    expect(mocks.createChatStream).not.toHaveBeenCalled()
+    expect(mocks.trackAppEvent).toHaveBeenCalledWith(
+      'chat_provider_error',
+      expect.objectContaining({ sessionId: 'session-rome', errorCode: 'domain_mismatch' })
+    )
+  })
+
+  it('blocks obviously corrupted model output and avoids persisting it', async () => {
+    const db = new MockD1Database()
+    const kv = new MockKVNamespace()
+
+    mocks.getCloudflareContext.mockResolvedValue({
+      env: {
+        travel2chile_db: db,
+        travel2chile_kv: kv,
+      },
+    })
+    mocks.createChatStream.mockReturnValue(
+      createSseStream([
+        'data: {"type":"text","text":"Roma tiene el Colosseo (€16/Europa) y un biciculto por Trastevere."}\n\n',
+        'data: [DONE]\n\n',
+      ])
+    )
+
+    const response = await POST(
+      new Request('http://localhost/api/chat', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'CF-Connecting-IP': '127.0.0.1',
+        },
+        body: JSON.stringify({ message: 'Dame ideas para el sur de Chile', sessionId: 'session-corrupt' }),
+      })
+    )
+
+    expect(response.status).toBe(200)
+    const { text } = await readResponseChunks(response)
+    expect(text).toContain('"code":"invalid_model_output"')
+    await waitFor(() => db.messages.length >= 1)
+    expect(db.messages).toEqual([
+      {
+        id: expect.any(String),
+        conversation_id: expect.any(String),
+        role: 'user',
+        content: 'Dame ideas para el sur de Chile',
+        created_at: expect.any(String),
+      },
+    ])
   })
 })

@@ -67,3 +67,26 @@ test('chat renders a provider error message from SSE', async ({ page }) => {
   await page.getByRole('button', { name: /Mejor época para Atacama/i }).click()
   await expect(page.getByText('OpenRouter tardó demasiado en responder. Intenta nuevamente.')).toBeVisible()
 })
+
+test('chat renders a controlled error when model output is invalid', async ({ page }) => {
+  await page.route('**/api/history**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ history: [], conversationId: null }),
+    })
+  })
+
+  await page.route('**/api/chat', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: 'data: {"type":"error","code":"invalid_model_output","message":"El modelo devolvió una respuesta inválida. Intenta nuevamente.","retryable":true}\n\ndata: [DONE]\n\n',
+    })
+  })
+
+  await page.goto('/chat')
+
+  await page.getByRole('button', { name: /Rapa Nui: costos y logística/i }).click()
+  await expect(page.getByText('El modelo devolvió una respuesta inválida. Intenta nuevamente.')).toBeVisible()
+})

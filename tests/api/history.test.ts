@@ -51,8 +51,8 @@ describe('GET and DELETE /api/history', () => {
     })
     mocks.createChatStream.mockReturnValue(
       createSseStream([
-        'data: {"text":"Hola "}\n\n',
-        'data: {"text":"viajero"}\n\n',
+        'data: {"type":"text","text":"Hola "}\n\n',
+        'data: {"type":"text","text":"viajero"}\n\n',
         'data: [DONE]\n\n',
       ])
     )
@@ -101,7 +101,7 @@ describe('GET and DELETE /api/history', () => {
     })
     mocks.createChatStream.mockReturnValue(
       createSseStream([
-        'data: {"text":"Una respuesta"}\n\n',
+        'data: {"type":"text","text":"Una respuesta"}\n\n',
         'data: [DONE]\n\n',
       ])
     )
