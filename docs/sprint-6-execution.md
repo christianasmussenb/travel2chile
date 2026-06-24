@@ -1,6 +1,6 @@
-# Sprint 6: ejecución preparada
+# Sprint 6: ejecución y cierre
 
-_Preparado el 24 de junio de 2026._
+_Preparado y ejecutado el 24 de junio de 2026._
 
 ## Objetivo
 
@@ -11,6 +11,14 @@ Llevar Travel2Chile desde un estado funcional y probado a un estado operable con
 - Cada cambio en `main` puede desplegarse a Cloudflare con un flujo repetible.
 - Los errores de OpenRouter dejan de verse como fallas opacas en streaming.
 - El equipo obtiene visibilidad básica de uso y fallos para tomar decisiones del siguiente ciclo.
+
+## Resultado real
+
+- El deploy automático a Cloudflare quedó implementado y documentado.
+- El manejo de errores del proveedor quedó endurecido.
+- La observabilidad mínima quedó activa con eventos estructurados del Worker.
+- La respuesta del modelo ahora se valida completa antes de ser mostrada o persistida.
+- La UI ofrece retry para respuestas fallidas recuperables.
 
 ## Alcance del sprint
 
@@ -58,12 +66,34 @@ Llevar Travel2Chile desde un estado funcional y probado a un estado operable con
 7. Registrar eventos mínimos de observabilidad y documentarlos.
 8. Ejecutar `npm run lint`, `npm run test`, `npm run build` y `npm run test:ui`.
 
+## Tareas efectivamente realizadas
+
+1. Se creó el workflow de deploy a Cloudflare.
+2. Se documentaron secretos y flujo de deploy en `README.md`.
+3. Se tipificaron errores SSE.
+4. Se endureció el manejo de errores en backend y frontend.
+5. Se agregaron logs estructurados del Worker.
+6. Se añadieron guardas contra:
+   - prompts fuera de dominio;
+   - reasoning leak;
+   - respuestas truncadas;
+   - respuestas reiniciadas o repetidas;
+   - contenido semánticamente corrupto.
+7. Se cambió el flujo del chat a `buffer + validar + emitir`.
+8. Se agregó retry de UI para errores recuperables.
+9. Se validó todo con `lint`, `test`, `build` y `test:ui`.
+
 ## Criterio de salida
 
 - Existe un workflow de deploy listo para usarse en GitHub Actions.
 - El chat diferencia errores internos, de proveedor y de red.
 - La suite automática cubre el nuevo comportamiento.
 - El equipo sabe qué mirar en Cloudflare para validar uso y fallos.
+
+## Criterio de salida alcanzado
+
+- Sí, a nivel de código, pruebas y documentación.
+- Queda como paso operacional desplegar la versión final del sprint y validar en el entorno real.
 
 ## Fuera de alcance
 
@@ -74,9 +104,9 @@ Llevar Travel2Chile desde un estado funcional y probado a un estado operable con
 
 ## Riesgos y dependencias
 
-- El deploy depende de credenciales reales de Cloudflare aún no verificadas en este repositorio.
-- La semántica exacta de errores de OpenRouter puede requerir inspección adicional en integración real.
-- La observabilidad útil depende de decidir una convención mínima de eventos antes de instrumentar.
+- El deploy depende de credenciales reales de Cloudflare ya configuradas, pero la validación final en producción sigue siendo necesaria.
+- El modelo actual puede seguir entregando respuestas pobres aunque ahora sean bloqueadas antes de mostrarse.
+- La observabilidad actual está centrada en Cloudflare; para alertas y retención externa hace falta un siguiente sprint.
 
 ## Orden recomendado de ejecución
 
@@ -108,3 +138,9 @@ Llevar Travel2Chile desde un estado funcional y probado a un estado operable con
 3. Worker `travel2chile-v4`.
 4. `Observability` o `Logs`.
 5. Buscar entradas JSON con `"source":"travel2chile"` y `"type":"app_event"`.
+
+## Siguiente foco recomendado
+
+- Integración con monitoreo externo.
+- Reducción de `invalid_model_output` mediante mejor modelo o mejor routing.
+- Ajustes de memoria y continuidad conversacional.

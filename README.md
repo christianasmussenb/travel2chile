@@ -1,6 +1,6 @@
 # Travel2Chile v4
 
-Travel2Chile es un asistente de viajes en español enfocado en Chile. La aplicación combina una landing pública, un chat con streaming, persistencia de conversaciones por sesión y despliegue sobre Next.js + OpenNext para Cloudflare.
+Travel2Chile es un asistente de viajes en español enfocado en Chile. La aplicación combina una landing pública, un chat con validación server-side de respuestas, persistencia de conversaciones por sesión y despliegue sobre Next.js + OpenNext para Cloudflare.
 
 ## Documentación
 
@@ -15,6 +15,7 @@ Travel2Chile es un asistente de viajes en español enfocado en Chile. La aplicac
 - Ayuda a planificar viajes por Chile con respuestas prácticas sobre destinos, temporadas, transporte, alojamiento y costos.
 - Mantiene historial de conversación cuando el entorno de Cloudflare tiene D1 disponible.
 - Aplica rate limit por IP cuando KV está disponible.
+- Bloquea consultas fuera de alcance y respuestas inválidas del modelo antes de mostrarlas al usuario.
 - Funciona en local con `next dev` y en preview/despliegue con Cloudflare/OpenNext.
 
 ## Arquitectura
@@ -23,8 +24,10 @@ Travel2Chile es un asistente de viajes en español enfocado en Chile. La aplicac
 - Chat: [`src/components/ChatInterface.tsx`](/Users/cab/VSCODE/travel2chile/src/components/ChatInterface.tsx).
 - API de chat: [`src/app/api/chat/route.ts`](/Users/cab/VSCODE/travel2chile/src/app/api/chat/route.ts).
 - API de historial: [`src/app/api/history/route.ts`](/Users/cab/VSCODE/travel2chile/src/app/api/history/route.ts).
-- IA: [`src/lib/ai.ts`](/Users/cab/VSCODE/travel2chile/src/lib/ai.ts), con streaming SSE usando OpenRouter.
+- IA: [`src/lib/ai.ts`](/Users/cab/VSCODE/travel2chile/src/lib/ai.ts), usando OpenRouter.
+- Guardas de dominio y salida: [`src/lib/domain-guard.ts`](/Users/cab/VSCODE/travel2chile/src/lib/domain-guard.ts), [`src/lib/output-guard.ts`](/Users/cab/VSCODE/travel2chile/src/lib/output-guard.ts).
 - Persistencia: [`src/lib/db.ts`](/Users/cab/VSCODE/travel2chile/src/lib/db.ts) sobre D1.
+- Observabilidad de app: [`src/lib/observability.ts`](/Users/cab/VSCODE/travel2chile/src/lib/observability.ts).
 - Esquema SQL: [`db/schema.sql`](/Users/cab/VSCODE/travel2chile/db/schema.sql).
 
 ### Flujo de datos
@@ -34,10 +37,11 @@ Travel2Chile es un asistente de viajes en español enfocado en Chile. La aplicac
 3. La API intenta resolver bindings de Cloudflare.
 4. Si hay D1, carga historial y guarda el mensaje del usuario.
 5. Si hay KV, aplica rate limit por IP.
-6. La respuesta de OpenRouter se transmite como SSE al cliente.
-7. Si hay D1, la respuesta final del asistente también se persiste.
-8. `GET /api/history` permite recuperar el historial de la sesión actual.
-9. `DELETE /api/history` limpia la conversación de esa sesión.
+6. La respuesta de OpenRouter se reúne y valida en el backend.
+7. Solo si la respuesta es válida, se emite como SSE al cliente.
+8. Si hay D1, la respuesta final del asistente también se persiste.
+9. `GET /api/history` permite recuperar el historial de la sesión actual.
+10. `DELETE /api/history` limpia la conversación de esa sesión.
 
 ## Requisitos
 
@@ -88,7 +92,7 @@ Abrir `http://localhost:3000`.
 ### Qué esperar en local
 
 - La UI del chat funciona.
-- El streaming funciona.
+- La respuesta se muestra con indicador de carga y luego se emite al cliente en SSE ya validado.
 - Si no hay bindings reales de Cloudflare, el historial y el rate limit quedan desactivados o en modo no-op.
 - La aplicación sigue respondiendo mientras exista `OPENROUTER_API_KEY`.
 
@@ -165,6 +169,7 @@ El esquema completo está en [`db/schema.sql`](/Users/cab/VSCODE/travel2chile/db
 - En `next dev`, si no están disponibles los bindings de Cloudflare, no hay persistencia de historial ni rate limit.
 - La persistencia es por sesión y tiene una ventana de reutilización de 24 horas para conversaciones activas.
 - El rate limit solo se aplica cuando KV está disponible.
+- La calidad final sigue dependiendo del modelo upstream; el sistema ahora bloquea muchas respuestas malas, pero no convierte un modelo débil en uno excelente.
 
 ## Pruebas y verificación
 
