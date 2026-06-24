@@ -339,4 +339,48 @@ describe('POST /api/chat', () => {
       },
     ])
   })
+
+  it('blocks repeated restarted output and avoids persisting it', async () => {
+    const db = new MockD1Database()
+    const kv = new MockKVNamespace()
+
+    mocks.getCloudflareContext.mockResolvedValue({
+      env: {
+        travel2chile_db: db,
+        travel2chile_kv: kv,
+      },
+    })
+    mocks.createChatStream.mockReturnValue(
+      createSseStream([
+        'data: {"type":"text","text":"Qué encontrarás\\n\\nRecorrido: Lago Llanquihue.\\nAlojamiento: hotel frente al lago.\\n"}\n\n',
+        'data: {"type":"text","text":"Qué encontrarás\\n\\nRecorrido: Lago Llanquihue.\\nAlojamiento: hotel frente al lago.\\n"}\n\n',
+        'data: [DONE]\n\n',
+      ])
+    )
+
+    const response = await POST(
+      new Request('http://localhost/api/chat', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'CF-Connecting-IP': '127.0.0.1',
+        },
+        body: JSON.stringify({ message: 'Dame un plan en bici por Puerto Varas', sessionId: 'session-repeat' }),
+      })
+    )
+
+    expect(response.status).toBe(200)
+    const { text } = await readResponseChunks(response)
+    expect(text).toContain('se reinició o repitió de forma anómala')
+    await waitFor(() => db.messages.length >= 1)
+    expect(db.messages).toEqual([
+      {
+        id: expect.any(String),
+        conversation_id: expect.any(String),
+        role: 'user',
+        content: 'Dame un plan en bici por Puerto Varas',
+        created_at: expect.any(String),
+      },
+    ])
+  })
 })

@@ -26,6 +26,17 @@ const CORRUPTION_PATTERNS = [
   'rki',
 ]
 
+const RESTART_MARKERS = [
+  'qué encontrarás',
+  'alternativas (si quieres cambiar de escenario):',
+  'día 1:',
+  'día 2:',
+  'día 3:',
+  'alojamiento:',
+  'comida:',
+  'recorrido:',
+]
+
 function encodeSseChunk(payload: ChatStreamPayload | '[DONE]') {
   return new TextEncoder().encode(`data: ${typeof payload === 'string' ? payload : JSON.stringify(payload)}\n\n`)
 }
@@ -81,6 +92,38 @@ function looksCorrupted(text: string) {
   return false
 }
 
+function looksRepeatedOrRestarted(text: string) {
+  const normalized = text.toLowerCase()
+
+  if (
+    RESTART_MARKERS.some(
+      (marker) => normalized.includes(marker) && normalized.indexOf(marker) !== normalized.lastIndexOf(marker)
+    )
+  ) {
+    return true
+  }
+
+  const lines = normalized
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length >= 18)
+
+  const seen = new Set<string>()
+  for (const line of lines) {
+    if (seen.has(line)) return true
+    seen.add(line)
+  }
+
+  return false
+}
+
+function looksBrokenEnding(text: string) {
+  const trimmed = text.trimEnd()
+  if (trimmed.length < 30) return false
+
+  return /\*\*[A-Za-zÁÉÍÓÚáéíóúñÑ]{0,6}$/.test(trimmed) || /\b[CcRr]$/.test(trimmed)
+}
+
 export function guardChatStream(stream: ReadableStream) {
   return new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -98,12 +141,12 @@ export function guardChatStream(stream: ReadableStream) {
         const chunk = decoder.decode(value)
         for (const line of chunk.split('\n')) {
           if (line === 'data: [DONE]') {
-            if (!blocked && bufferedText && !looksTruncated(accumulated)) {
+            if (!blocked && bufferedText && !looksTruncated(accumulated) && !looksBrokenEnding(accumulated)) {
               controller.enqueue(encodeSseChunk({ type: 'text', text: bufferedText }))
               bufferedText = ''
             }
 
-            if (!blocked && looksTruncated(accumulated)) {
+            if (!blocked && (looksTruncated(accumulated) || looksBrokenEnding(accumulated))) {
               blocked = true
               controller.enqueue(
                 encodeSseChunk(
@@ -164,6 +207,22 @@ export function guardChatStream(stream: ReadableStream) {
             return
           }
 
+          if (looksRepeatedOrRestarted(accumulated)) {
+            blocked = true
+            controller.enqueue(
+              encodeSseChunk(
+                createErrorPayload(
+                  'invalid_model_output',
+                  'La respuesta del modelo se reinició o repitió de forma anómala. Intenta nuevamente.',
+                  true
+                )
+              )
+            )
+            controller.enqueue(encodeSseChunk('[DONE]'))
+            controller.close()
+            return
+          }
+
           if (!bufferReleased) {
             const shouldRelease =
               bufferedText.length >= 120 ||
@@ -197,12 +256,34 @@ export function guardChatStream(stream: ReadableStream) {
             )
           )
         }
+        if (looksBrokenEnding(accumulated)) {
+          controller.enqueue(
+            encodeSseChunk(
+              createErrorPayload(
+                'invalid_model_output',
+                'La respuesta del modelo llegó incompleta. Intenta nuevamente.',
+                true
+              )
+            )
+          )
+        }
         if (looksCorrupted(accumulated)) {
           controller.enqueue(
             encodeSseChunk(
               createErrorPayload(
                 'invalid_model_output',
                 'El modelo devolvió contenido inconsistente. Intenta nuevamente.',
+                true
+              )
+            )
+          )
+        }
+        if (looksRepeatedOrRestarted(accumulated)) {
+          controller.enqueue(
+            encodeSseChunk(
+              createErrorPayload(
+                'invalid_model_output',
+                'La respuesta del modelo se reinició o repitió de forma anómala. Intenta nuevamente.',
                 true
               )
             )

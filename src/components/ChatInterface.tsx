@@ -64,6 +64,7 @@ export default function ChatInterface() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [showSuggested, setShowSuggested] = useState(true)
   const [hoveredSuggestion, setHoveredSuggestion] = useState<number | null>(null)
+  const [retryPrompt, setRetryPrompt] = useState<string | null>(null)
   const sessionId = useRef('')
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -85,14 +86,25 @@ export default function ChatInterface() {
   }, [messages])
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, options?: { retry?: boolean }) => {
       if (!text.trim() || isStreaming) return
       setShowSuggested(false)
-      setMessages((prev) => [...prev, { role: 'user', content: text }])
-      setInput('')
-      if (textareaRef.current) textareaRef.current.style.height = '52px'
+      setRetryPrompt(null)
+      if (options?.retry) {
+        setMessages((prev) => {
+          const updated = [...prev]
+          if (updated[updated.length - 1]?.role === 'assistant') {
+            updated[updated.length - 1] = { role: 'assistant', content: '' }
+            return updated
+          }
+          return [...updated, { role: 'assistant', content: '' }]
+        })
+      } else {
+        setMessages((prev) => [...prev, { role: 'user', content: text }, { role: 'assistant', content: '' }])
+        setInput('')
+        if (textareaRef.current) textareaRef.current.style.height = '52px'
+      }
       setIsStreaming(true)
-      setMessages((prev) => [...prev, { role: 'assistant', content: '' }])
 
       try {
         const res = await fetch('/api/chat', {
@@ -113,6 +125,7 @@ export default function ChatInterface() {
               try {
                 const d = JSON.parse(line.slice(6)) as ChatEvent | { text?: string; error?: string }
                 if (isTypedChatEvent(d) && d.type === 'text' && d.text) {
+                  setRetryPrompt(null)
                   setMessages((prev) => {
                     const updated = [...prev]
                     updated[updated.length - 1] = {
@@ -123,6 +136,7 @@ export default function ChatInterface() {
                   })
                 }
                 if (isTypedChatEvent(d) && d.type === 'error') {
+                  setRetryPrompt(d.retryable ? text : null)
                   setMessages((prev) => {
                     const updated = [...prev]
                     updated[updated.length - 1] = {
@@ -133,6 +147,7 @@ export default function ChatInterface() {
                   })
                 }
                 if (!isTypedChatEvent(d) && 'text' in d && d.text) {
+                  setRetryPrompt(null)
                   setMessages((prev) => {
                     const updated = [...prev]
                     updated[updated.length - 1] = {
@@ -143,6 +158,7 @@ export default function ChatInterface() {
                   })
                 }
                 if (!isTypedChatEvent(d) && 'error' in d && d.error) {
+                  setRetryPrompt(text)
                   setMessages((prev) => {
                     const updated = [...prev]
                     updated[updated.length - 1] = {
@@ -157,6 +173,7 @@ export default function ChatInterface() {
           }
         }
       } catch {
+        setRetryPrompt(text)
         setMessages((prev) => {
           const updated = [...prev]
           updated[updated.length - 1] = {
@@ -180,6 +197,7 @@ export default function ChatInterface() {
     })
     setMessages([])
     setShowSuggested(true)
+    setRetryPrompt(null)
   }
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -192,6 +210,11 @@ export default function ChatInterface() {
   const surface = 'rgba(255,255,255,0.04)'
   const border = 'rgba(255,255,255,0.09)'
   const accent = '#D52B1E'
+  const canRetryLastAnswer =
+    Boolean(retryPrompt) &&
+    !isStreaming &&
+    messages[messages.length - 1]?.role === 'assistant' &&
+    messages[messages.length - 1]?.content.startsWith('⚠️')
 
   return (
     <div style={{
@@ -555,6 +578,25 @@ export default function ChatInterface() {
           <p style={{ textAlign: 'center', fontSize: 12, color: '#94A3B8', marginTop: 10, lineHeight: 1.5 }}>
             Presiona Enter para enviar · Shift+Enter para nueva línea · Respuestas de IA pueden variar
           </p>
+          {canRetryLastAnswer ? (
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
+              <button
+                onClick={() => retryPrompt && sendMessage(retryPrompt, { retry: true })}
+                style={{
+                  border: `1px solid rgba(213,43,30,0.45)`,
+                  background: 'rgba(213,43,30,0.12)',
+                  color: '#FCA5A5',
+                  borderRadius: 999,
+                  padding: '8px 14px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Reintentar respuesta
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
 

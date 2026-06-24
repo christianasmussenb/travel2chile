@@ -90,3 +90,39 @@ test('chat renders a controlled error when model output is invalid', async ({ pa
   await page.getByRole('button', { name: /Rapa Nui: costos y logística/i }).click()
   await expect(page.getByText('El modelo devolvió una respuesta inválida. Intenta nuevamente.')).toBeVisible()
 })
+
+test('chat can retry the last answer after a retryable error', async ({ page }) => {
+  let chatCalls = 0
+
+  await page.route('**/api/history**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ history: [], conversationId: null }),
+    })
+  })
+
+  await page.route('**/api/chat', async (route) => {
+    chatCalls += 1
+    if (chatCalls === 1) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/event-stream',
+        body: 'data: {"type":"error","code":"invalid_model_output","message":"La respuesta del modelo se reinició o repitió de forma anómala. Intenta nuevamente.","retryable":true}\n\ndata: [DONE]\n\n',
+      })
+      return
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: 'data: {"type":"text","text":"Puerto Varas es una gran base para pedalear alrededor del Llanquihue."}\n\ndata: [DONE]\n\n',
+    })
+  })
+
+  await page.goto('/chat')
+  await page.getByRole('button', { name: /Presupuesto 7 días en Chile/i }).click()
+  await expect(page.getByRole('button', { name: /Reintentar respuesta/i })).toBeVisible()
+  await page.getByRole('button', { name: /Reintentar respuesta/i }).click()
+  await expect(page.getByText('Puerto Varas es una gran base para pedalear alrededor del Llanquihue.')).toBeVisible()
+})
