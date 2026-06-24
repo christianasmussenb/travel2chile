@@ -147,12 +147,12 @@ export default function ChatInterface() {
     <div style={{
       display: 'flex',
       flexDirection: 'column',
-      height: '100vh',
+      minHeight: '100vh',
       background: bg,
       color: '#E2E8F0',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       position: 'relative',
-      overflow: 'hidden',
+      overflow: 'clip',
     }}>
 
       {/* Ambient glow top-left */}
@@ -175,10 +175,12 @@ export default function ChatInterface() {
         position: 'relative', zIndex: 10,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '0 20px',
-        height: 60,
+        minHeight: 64,
         background: 'rgba(7,13,26,0.85)',
         backdropFilter: 'blur(20px)',
         borderBottom: `1px solid ${border}`,
+        gap: 12,
+        flexWrap: 'wrap',
       }}>
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -248,22 +250,37 @@ export default function ChatInterface() {
       </div>
 
       {/* Messages */}
-      <div style={{
+      <main style={{
         flex: 1,
+        minHeight: 0,
         overflowY: 'auto',
-        padding: '24px 16px',
+        padding: messages.length === 0 && showSuggested ? '32px 20px 24px' : '24px 20px',
         position: 'relative', zIndex: 1,
         scrollbarWidth: 'thin',
         scrollbarColor: 'rgba(255,255,255,0.1) transparent',
       }}>
-        <div style={{ maxWidth: 760, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{
+          maxWidth: 960,
+          width: '100%',
+          margin: '0 auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 18,
+          minHeight: '100%',
+          justifyContent: messages.length === 0 && showSuggested ? 'center' : 'flex-start',
+        }}>
 
           {/* Welcome / Suggested — franja compacta */}
           {messages.length === 0 && showSuggested && (
-            <div style={{ padding: '10px 0 6px' }}>
+            <section style={{
+              padding: '24px 0 12px',
+              maxWidth: 760,
+              width: '100%',
+              margin: '0 auto',
+            }}>
               {/* Título inline */}
               <div style={{
-                display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10,
+                display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14,
               }}>
                 <span style={{ fontSize: 18 }}>🌋</span>
                 <span style={{ fontSize: 14, fontWeight: 600, color: '#94A3B8' }}>
@@ -271,7 +288,7 @@ export default function ChatInterface() {
                 </span>
               </div>
               {/* Chips en 2 filas */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                 {SUGGESTED.map((s, i) => (
                   <button
                     key={s.text}
@@ -304,7 +321,7 @@ export default function ChatInterface() {
                   </button>
                 ))}
               </div>
-            </div>
+            </section>
           )}
 
           {/* Chat messages */}
@@ -315,7 +332,10 @@ export default function ChatInterface() {
                 display: 'flex',
                 flexDirection: msg.role === 'user' ? 'row-reverse' : 'row',
                 alignItems: 'flex-end',
-                gap: 10,
+                gap: 12,
+                width: '100%',
+                maxWidth: 860,
+                margin: '0 auto',
               }}
             >
               {/* Avatar */}
@@ -341,10 +361,10 @@ export default function ChatInterface() {
               {/* Bubble */}
               <div style={{
                 ...(msg.role === 'user'
-                  ? { maxWidth: '72%' }
-                  : { flex: 1, minWidth: 0 }
+                  ? { maxWidth: 'min(78%, 640px)' }
+                  : { flex: 1, minWidth: 0, maxWidth: 720 }
                 ),
-                padding: '12px 16px',
+                padding: '14px 18px',
                 borderRadius: msg.role === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
                 ...(msg.role === 'user'
                   ? {
@@ -360,8 +380,8 @@ export default function ChatInterface() {
                     overflowX: 'auto',
                   }
                 ),
-                fontSize: 14,
-                lineHeight: 1.6,
+                fontSize: 15,
+                lineHeight: 1.65,
               }}>
                 {msg.role === 'assistant' ? (
                   <div style={{ color: '#CBD5E1' }}>
@@ -396,24 +416,24 @@ export default function ChatInterface() {
                     )}
                   </div>
                 ) : (
-                  <p style={{ margin: 0, fontSize: 14 }}>{msg.content}</p>
+                  <p style={{ margin: 0, fontSize: 15, whiteSpace: 'pre-wrap' }}>{msg.content}</p>
                 )}
               </div>
             </div>
           ))}
           <div ref={bottomRef} />
         </div>
-      </div>
+      </main>
 
       {/* Input */}
       <div style={{
         position: 'relative', zIndex: 10,
-        padding: '12px 16px 16px',
+        padding: '14px 20px 18px',
         background: 'rgba(7,13,26,0.9)',
         backdropFilter: 'blur(20px)',
         borderTop: `1px solid ${border}`,
       }}>
-        <div style={{ maxWidth: 760, margin: '0 auto' }}>
+        <div style={{ maxWidth: 960, margin: '0 auto', width: '100%' }}>
           <div style={{
             display: 'flex', alignItems: 'flex-end', gap: 10,
             background: 'rgba(255,255,255,0.05)',
@@ -421,6 +441,7 @@ export default function ChatInterface() {
             borderRadius: 16,
             padding: '8px 8px 8px 16px',
             transition: 'border-color 0.15s',
+            boxShadow: '0 12px 32px rgba(0,0,0,0.22)',
           }}>
             <textarea
               ref={textareaRef}
@@ -445,7 +466,7 @@ export default function ChatInterface() {
                 border: 'none',
                 outline: 'none',
                 color: '#E2E8F0',
-                fontSize: 14,
+                fontSize: 15,
                 lineHeight: '22px',
                 minHeight: 36,
                 maxHeight: 140,
@@ -481,7 +502,7 @@ export default function ChatInterface() {
               )}
             </button>
           </div>
-          <p style={{ textAlign: 'center', fontSize: 11, color: '#334155', marginTop: 8 }}>
+          <p style={{ textAlign: 'center', fontSize: 12, color: '#94A3B8', marginTop: 10, lineHeight: 1.5 }}>
             Presiona Enter para enviar · Shift+Enter para nueva línea · Respuestas de IA pueden variar
           </p>
         </div>

@@ -6,7 +6,7 @@ const nextTypescript = require('eslint-config-next/typescript')
 
 const eslintConfig = [
   {
-    ignores: ['.next/**', '.open-next/**', '.wrangler/**', 'coverage/**', 'node_modules/**'],
+    ignores: ['.next/**', '.open-next/**', '.wrangler/**', 'coverage/**', 'node_modules/**', 'test-results/**'],
   },
   ...nextCoreWebVitals,
   ...nextTypescript,
