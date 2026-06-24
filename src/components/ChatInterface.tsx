@@ -9,6 +9,36 @@ interface Message {
   content: string
 }
 
+type ChatEvent =
+  | { type: 'text'; text: string }
+  | { type: 'error'; code: string; message: string; retryable: boolean }
+
+function isTypedChatEvent(value: unknown): value is ChatEvent {
+  return Boolean(
+    value &&
+      typeof value === 'object' &&
+      'type' in value &&
+      (value as { type?: unknown }).type &&
+      typeof (value as { type?: unknown }).type === 'string'
+  )
+}
+
+function toUiErrorMessage(event: Extract<ChatEvent, { type: 'error' }>) {
+  if (event.code === 'config_error') {
+    return `⚠️ ${event.message}`
+  }
+
+  if (event.code === 'rate_limit' || event.code === 'provider_rate_limit') {
+    return `⚠️ ${event.message}`
+  }
+
+  if (event.code === 'provider_timeout') {
+    return `⚠️ ${event.message}`
+  }
+
+  return `⚠️ ${event.message}`
+}
+
 const SUGGESTED = [
   { text: '¿Cuándo ir a Torres del Paine?', icon: '🏔️' },
   { text: 'Presupuesto 7 días en Chile', icon: '💰' },
@@ -81,8 +111,8 @@ export default function ChatInterface() {
           for (const line of chunk.split('\n')) {
             if (line.startsWith('data: ') && !line.includes('[DONE]')) {
               try {
-                const d = JSON.parse(line.slice(6))
-                if (d.text) {
+                const d = JSON.parse(line.slice(6)) as ChatEvent | { text?: string; error?: string }
+                if (isTypedChatEvent(d) && d.type === 'text' && d.text) {
                   setMessages((prev) => {
                     const updated = [...prev]
                     updated[updated.length - 1] = {
@@ -92,7 +122,27 @@ export default function ChatInterface() {
                     return updated
                   })
                 }
-                if (d.error) {
+                if (isTypedChatEvent(d) && d.type === 'error') {
+                  setMessages((prev) => {
+                    const updated = [...prev]
+                    updated[updated.length - 1] = {
+                      role: 'assistant',
+                      content: toUiErrorMessage(d),
+                    }
+                    return updated
+                  })
+                }
+                if (!isTypedChatEvent(d) && 'text' in d && d.text) {
+                  setMessages((prev) => {
+                    const updated = [...prev]
+                    updated[updated.length - 1] = {
+                      role: 'assistant',
+                      content: updated[updated.length - 1].content + d.text,
+                    }
+                    return updated
+                  })
+                }
+                if (!isTypedChatEvent(d) && 'error' in d && d.error) {
                   setMessages((prev) => {
                     const updated = [...prev]
                     updated[updated.length - 1] = {

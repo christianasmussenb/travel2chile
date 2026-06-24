@@ -4,6 +4,7 @@ import { MockD1Database, createSseStream, readResponseChunks, waitFor } from '..
 const mocks = vi.hoisted(() => ({
   getCloudflareContext: vi.fn(),
   createChatStream: vi.fn(),
+  trackAppEvent: vi.fn(),
 }))
 
 vi.mock('@opennextjs/cloudflare', () => ({
@@ -12,6 +13,11 @@ vi.mock('@opennextjs/cloudflare', () => ({
 
 vi.mock('@/lib/ai', () => ({
   createChatStream: mocks.createChatStream,
+}))
+
+vi.mock('@/lib/observability', () => ({
+  trackAppEvent: mocks.trackAppEvent,
+  toIpHashHint: (ip: string | null) => (ip ? ip.slice(0, 6) : 'anon'),
 }))
 
 import { GET, DELETE } from '@/app/api/history/route'
@@ -24,6 +30,7 @@ describe('GET and DELETE /api/history', () => {
     process.env.OPENROUTER_API_KEY = 'test-openrouter-key'
     mocks.getCloudflareContext.mockReset()
     mocks.createChatStream.mockReset()
+    mocks.trackAppEvent.mockReset()
   })
 
   afterEach(() => {
@@ -78,6 +85,10 @@ describe('GET and DELETE /api/history', () => {
       { role: 'user', content: 'Recomiéndame rutas' },
       { role: 'assistant', content: 'Hola viajero' },
     ])
+    expect(mocks.trackAppEvent).toHaveBeenCalledWith(
+      'chat_session_started',
+      expect.objectContaining({ sessionId: 'session-history' })
+    )
   })
 
   it('deletes the active session history', async () => {
@@ -128,5 +139,9 @@ describe('GET and DELETE /api/history', () => {
 
     expect(payload.history).toEqual([])
     expect(payload.conversationId).toBeTruthy()
+    expect(mocks.trackAppEvent).toHaveBeenCalledWith(
+      'chat_history_cleared',
+      expect.objectContaining({ sessionId: 'session-delete' })
+    )
   })
 })

@@ -44,3 +44,26 @@ test('chat suggestions send a message and render the streamed answer', async ({ 
   await expect(page.getByText('Sugerencias — ¿qué quieres saber?')).toBeVisible()
   await expect(page.getByText('Hola desde Playwright')).toHaveCount(0)
 })
+
+test('chat renders a provider error message from SSE', async ({ page }) => {
+  await page.route('**/api/history**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ history: [], conversationId: null }),
+    })
+  })
+
+  await page.route('**/api/chat', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: 'data: {"type":"error","code":"provider_timeout","message":"OpenRouter tardó demasiado en responder. Intenta nuevamente.","retryable":true}\n\ndata: [DONE]\n\n',
+    })
+  })
+
+  await page.goto('/chat')
+
+  await page.getByRole('button', { name: /Mejor época para Atacama/i }).click()
+  await expect(page.getByText('OpenRouter tardó demasiado en responder. Intenta nuevamente.')).toBeVisible()
+})

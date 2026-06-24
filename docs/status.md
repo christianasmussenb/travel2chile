@@ -63,7 +63,11 @@ Travel2Chile v4 ya dejó de ser un starter y pasó a ser una aplicación funcion
 
 ## Pendientes relevantes
 
-- Conectar un despliegue automático a Cloudflare desde CI.
 - Agregar métricas de producto más específicas si el negocio lo requiere.
-- Endurecer el manejo de errores de OpenRouter y mostrar estados más explícitos en la UI.
 - Revisar si conviene persistir más contexto de conversación o segmentar por tipo de viaje.
+
+## Observabilidad operativa actual
+
+- El deploy a Cloudflare ya puede automatizarse desde GitHub Actions.
+- El chat ya clasifica errores del proveedor y los muestra de forma distinguible.
+- La app emite eventos estructurados del Worker para sesiones, mensajes, respuestas completas, rate limit, errores del proveedor y limpieza de historial.

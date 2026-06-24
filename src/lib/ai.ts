@@ -20,6 +20,84 @@ export interface Message {
   content: string
 }
 
+export type ChatErrorCode =
+  | 'config_error'
+  | 'rate_limit'
+  | 'provider_rate_limit'
+  | 'provider_timeout'
+  | 'provider_error'
+  | 'network_error'
+
+export type ChatStreamPayload =
+  | { type: 'text'; text: string }
+  | {
+      type: 'error'
+      code: ChatErrorCode
+      message: string
+      retryable: boolean
+    }
+
+function encodeSseChunk(payload: ChatStreamPayload | '[DONE]') {
+  return new TextEncoder().encode(`data: ${typeof payload === 'string' ? payload : JSON.stringify(payload)}\n\n`)
+}
+
+export function createErrorPayload(
+  code: ChatErrorCode,
+  message: string,
+  retryable: boolean
+): Extract<ChatStreamPayload, { type: 'error' }> {
+  return { type: 'error', code, message, retryable }
+}
+
+function classifyProviderError(error: unknown) {
+  const apiError = error as {
+    status?: number
+    code?: string
+    name?: string
+    message?: string
+  }
+
+  const status = apiError?.status
+  const code = String(apiError?.code ?? '').toLowerCase()
+  const name = String(apiError?.name ?? '').toLowerCase()
+  const message = String(apiError?.message ?? 'Error desconocido').toLowerCase()
+
+  if (status === 429 || code.includes('rate') || message.includes('rate limit')) {
+    return createErrorPayload(
+      'provider_rate_limit',
+      'OpenRouter alcanzó su límite temporal. Intenta nuevamente en unos minutos.',
+      true
+    )
+  }
+
+  if (
+    name.includes('abort') ||
+    code.includes('timeout') ||
+    message.includes('timeout') ||
+    message.includes('timed out')
+  ) {
+    return createErrorPayload(
+      'provider_timeout',
+      'OpenRouter tardó demasiado en responder. Intenta nuevamente.',
+      true
+    )
+  }
+
+  if (status === 401 || status === 403) {
+    return createErrorPayload(
+      'config_error',
+      'La configuración del proveedor de IA no es válida en este entorno.',
+      false
+    )
+  }
+
+  return createErrorPayload(
+    'provider_error',
+    'OpenRouter no pudo generar una respuesta en este momento.',
+    true
+  )
+}
+
 export function createChatStream(messages: Message[], apiKey: string): ReadableStream {
   const client = new OpenAI({
     apiKey,
@@ -46,20 +124,16 @@ export function createChatStream(messages: Message[], apiKey: string): ReadableS
         for await (const chunk of stream) {
           const text = chunk.choices[0]?.delta?.content || ''
           if (text) {
-            const data = `data: ${JSON.stringify({ text })}\n\n`
-            controller.enqueue(new TextEncoder().encode(data))
+            controller.enqueue(encodeSseChunk({ type: 'text', text }))
           }
           if (chunk.choices[0]?.finish_reason === 'stop') break
         }
 
-        controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'))
+        controller.enqueue(encodeSseChunk('[DONE]'))
         controller.close()
       } catch (error) {
-        const msg = error instanceof Error ? error.message : 'Error desconocido'
-        controller.enqueue(
-          new TextEncoder().encode(`data: ${JSON.stringify({ error: msg })}\n\n`)
-        )
-        controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'))
+        controller.enqueue(encodeSseChunk(classifyProviderError(error)))
+        controller.enqueue(encodeSseChunk('[DONE]'))
         controller.close()
       }
     },

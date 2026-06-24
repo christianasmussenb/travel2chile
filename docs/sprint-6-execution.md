@@ -85,3 +85,26 @@ Llevar Travel2Chile desde un estado funcional y probado a un estado operable con
 3. Manejo de errores en frontend.
 4. Cobertura de pruebas.
 5. Instrumentación y documentación final.
+
+## Implementación actual de observabilidad
+
+- Los eventos mínimos viven en logs estructurados del Worker.
+- Se emiten desde `src/app/api/chat/route.ts` y `src/app/api/history/route.ts`.
+- El helper común está en `src/lib/observability.ts`.
+
+### Eventos emitidos
+
+- `chat_session_started`
+- `chat_message_sent`
+- `chat_response_completed`
+- `chat_provider_error`
+- `chat_rate_limited`
+- `chat_history_cleared`
+
+### Dónde mirarlos
+
+1. Cloudflare Dashboard.
+2. `Workers & Pages`.
+3. Worker `travel2chile-v4`.
+4. `Observability` o `Logs`.
+5. Buscar entradas JSON con `"source":"travel2chile"` y `"type":"app_event"`.

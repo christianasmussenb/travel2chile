@@ -4,14 +4,24 @@ import { MockD1Database, MockKVNamespace, createSseStream, readResponseChunks, w
 const mocks = vi.hoisted(() => ({
   getCloudflareContext: vi.fn(),
   createChatStream: vi.fn(),
+  trackAppEvent: vi.fn(),
 }))
 
 vi.mock('@opennextjs/cloudflare', () => ({
   getCloudflareContext: mocks.getCloudflareContext,
 }))
 
-vi.mock('@/lib/ai', () => ({
-  createChatStream: mocks.createChatStream,
+vi.mock('@/lib/ai', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/ai')>()
+  return {
+    ...actual,
+    createChatStream: mocks.createChatStream,
+  }
+})
+
+vi.mock('@/lib/observability', () => ({
+  trackAppEvent: mocks.trackAppEvent,
+  toIpHashHint: (ip: string | null) => (ip ? ip.slice(0, 6) : 'anon'),
 }))
 
 import { POST } from '@/app/api/chat/route'
@@ -23,6 +33,7 @@ describe('POST /api/chat', () => {
     process.env.OPENROUTER_API_KEY = 'test-openrouter-key'
     mocks.getCloudflareContext.mockReset()
     mocks.createChatStream.mockReset()
+    mocks.trackAppEvent.mockReset()
   })
 
   afterEach(() => {
@@ -61,7 +72,8 @@ describe('POST /api/chat', () => {
 
     expect(response.status).toBe(500)
     const { text } = await readResponseChunks(response)
-    expect(text).toContain('API key no configurada.')
+    expect(text).toContain('"type":"error"')
+    expect(text).toContain('OpenRouter no está configurada')
   })
 
   it('streams assistant text and persists the conversation when bindings exist', async () => {
@@ -148,6 +160,60 @@ describe('POST /api/chat', () => {
 
     expect(response.status).toBe(429)
     const { text } = await readResponseChunks(response)
-    expect(text).toContain('Límite de 40 mensajes/hora alcanzado')
+    expect(text).toContain('"code":"rate_limit"')
+    expect(text).toContain('Límite de 40 mensajes por hora alcanzado')
+    expect(mocks.trackAppEvent).toHaveBeenCalledWith(
+      'chat_rate_limited',
+      expect.objectContaining({ sessionId: 'session-rate', ipHashHint: '127.0.' })
+    )
+  })
+
+  it('does not persist a partial assistant response if the stream ends with an error', async () => {
+    const db = new MockD1Database()
+    const kv = new MockKVNamespace()
+
+    mocks.getCloudflareContext.mockResolvedValue({
+      env: {
+        travel2chile_db: db,
+        travel2chile_kv: kv,
+      },
+    })
+    mocks.createChatStream.mockReturnValue(
+      createSseStream([
+        'data: {"type":"text","text":"Respuesta parcial"}\n\n',
+        'data: {"type":"error","code":"provider_timeout","message":"OpenRouter tardó demasiado en responder. Intenta nuevamente.","retryable":true}\n\n',
+        'data: [DONE]\n\n',
+      ])
+    )
+
+    const response = await POST(
+      new Request('http://localhost/api/chat', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'CF-Connecting-IP': '127.0.0.1',
+        },
+        body: JSON.stringify({ message: 'Arma un itinerario', sessionId: 'session-partial-error' }),
+      })
+    )
+
+    expect(response.status).toBe(200)
+    const { text } = await readResponseChunks(response)
+    expect(text).toContain('"code":"provider_timeout"')
+
+    await waitFor(() => db.messages.length >= 1)
+    expect(db.messages).toEqual([
+      {
+        id: expect.any(String),
+        conversation_id: expect.any(String),
+        role: 'user',
+        content: 'Arma un itinerario',
+        created_at: expect.any(String),
+      },
+    ])
+    expect(mocks.trackAppEvent).toHaveBeenCalledWith(
+      'chat_provider_error',
+      expect.objectContaining({ sessionId: 'session-partial-error', errorCode: 'provider_timeout' })
+    )
   })
 })
