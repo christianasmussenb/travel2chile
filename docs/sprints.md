@@ -91,3 +91,23 @@ Con el trabajo actual ya estable, el siguiente foco lógico es:
 3. mejorar métricas de producto y trazabilidad de uso;
 4. revisar si hace falta segmentar mejor el historial por tipo de viaje.
 
+## Sprint 6 recomendado: operación automatizada y robustez
+
+### Objetivo
+
+Convertir el estado actual en una operación repetible, observable y más resistente a fallos externos.
+
+### Entregables
+
+- Workflow de deploy a Cloudflare.
+- Manejo de errores de OpenRouter endurecido en backend y UI.
+- Instrumentación mínima de uso y fallos.
+- Cobertura de tests para los nuevos caminos de error.
+
+### Criterio de salida
+
+- El equipo puede validar, desplegar y diagnosticar la app sin depender de pasos manuales implícitos.
+
+### Preparación detallada
+
+- Ver [`docs/sprint-6-execution.md`](/Users/cab/VSCODE/travel2chile/docs/sprint-6-execution.md).

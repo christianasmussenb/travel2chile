@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-_Estado al 18 de junio de 2026._
+_Estado verificado localmente al 24 de junio de 2026._
 
 ## Resumen ejecutivo
 
@@ -54,10 +54,16 @@ Travel2Chile v4 ya dejó de ser un starter y pasó a ser una aplicación funcion
 - `npm run test:ui` pasa.
 - El flujo principal está operativo en local y en preview Cloudflare.
 
+## Verificación realizada el 24 de junio de 2026
+
+- Se validó que los sprints 1 a 5 tienen correlato directo en código, pruebas y CI.
+- Existe workflow de GitHub Actions en `.github/workflows/ci.yml`.
+- La suite actual cubre API de chat, historial, persistencia D1 mockeada y smoke UI con Playwright.
+- La deuda principal ya no es de base técnica sino de operación y robustez del producto.
+
 ## Pendientes relevantes
 
 - Conectar un despliegue automático a Cloudflare desde CI.
 - Agregar métricas de producto más específicas si el negocio lo requiere.
 - Endurecer el manejo de errores de OpenRouter y mostrar estados más explícitos en la UI.
 - Revisar si conviene persistir más contexto de conversación o segmentar por tipo de viaje.
-

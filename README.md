@@ -7,6 +7,7 @@ Travel2Chile es un asistente de viajes en español enfocado en Chile. La aplicac
 - [`docs/status.md`](/Users/cab/VSCODE/travel2chile/docs/status.md): avances, estado actual y pendientes.
 - [`docs/lessons-learned.md`](/Users/cab/VSCODE/travel2chile/docs/lessons-learned.md): aprendizajes técnicos y operativos.
 - [`docs/sprints.md`](/Users/cab/VSCODE/travel2chile/docs/sprints.md): plan de sprints.
+- [`docs/sprint-6-execution.md`](/Users/cab/VSCODE/travel2chile/docs/sprint-6-execution.md): plan ejecutable del siguiente sprint.
 - [`docs/testing.md`](/Users/cab/VSCODE/travel2chile/docs/testing.md): estrategia de pruebas y verificación.
 
 ## Qué resuelve
@@ -95,6 +96,7 @@ Abrir `http://localhost:3000`.
 
 - `npm run preview` levanta el bundle de OpenNext para validación local del runtime Cloudflare.
 - `npm run deploy` publica en Cloudflare cuando los bindings y secretos están configurados.
+- `.github/workflows/deploy.yml` automatiza el deploy a Cloudflare cuando `CI` termina correctamente sobre `main`, y también permite `workflow_dispatch` con validación previa.
 
 ### Despliegue en Cloudflare
 
@@ -128,6 +130,19 @@ npm run deploy
 ```bash
 npm run preview
 ```
+
+### Deploy desde GitHub Actions
+
+El repositorio espera estos secretos en GitHub:
+
+- `CLOUDFLARE_API_TOKEN`: token con permisos para desplegar Workers y acceder a los recursos enlazados.
+- `CLOUDFLARE_ACCOUNT_ID`: account ID de Cloudflare donde vive el Worker.
+
+Comportamiento del pipeline:
+
+- `CI` sigue ejecutando `lint`, `test` y `test:ui` en `push` a `main` y en `pull_request`.
+- `Deploy` se dispara automáticamente solo cuando `CI` termina en verde para `main`.
+- `Deploy` también puede ejecutarse manualmente por `workflow_dispatch`, pero en ese caso corre primero `lint`, `test` y `test:ui` antes de desplegar.
 
 ## Observabilidad en Cloudflare
 
