@@ -1,4 +1,5 @@
 import OpenAI from 'openai'
+import { describeTextChunk, logStreamDebug, type StreamDebugContext } from './stream-debug'
 
 const SYSTEM_PROMPT = `Eres un asistente virtual especializado en viajes por Chile.
 Tu objetivo es ayudar a planificar viajes con información práctica sobre destinos,
@@ -103,7 +104,7 @@ function classifyProviderError(error: unknown) {
   )
 }
 
-export function createChatStream(messages: Message[], apiKey: string): ReadableStream {
+export function createChatStream(messages: Message[], apiKey: string, debug?: StreamDebugContext): ReadableStream {
   const client = new OpenAI({
     apiKey,
     baseURL: 'https://openrouter.ai/api/v1',
@@ -116,6 +117,10 @@ export function createChatStream(messages: Message[], apiKey: string): ReadableS
   return new ReadableStream({
     async start(controller) {
       try {
+        logStreamDebug(debug, 'provider_request_started', {
+          messageCount: messages.length,
+        })
+
         const stream = await client.chat.completions.create({
           model: 'openrouter/free',
           max_tokens: 1024,
@@ -128,15 +133,23 @@ export function createChatStream(messages: Message[], apiKey: string): ReadableS
 
         for await (const chunk of stream) {
           const text = chunk.choices[0]?.delta?.content || ''
+          logStreamDebug(debug, 'provider_chunk_received', {
+            finishReason: chunk.choices[0]?.finish_reason ?? null,
+            ...describeTextChunk(text),
+          })
           if (text) {
             controller.enqueue(encodeSseChunk({ type: 'text', text }))
           }
           if (chunk.choices[0]?.finish_reason === 'stop') break
         }
 
+        logStreamDebug(debug, 'provider_stream_done')
         controller.enqueue(encodeSseChunk('[DONE]'))
         controller.close()
       } catch (error) {
+        logStreamDebug(debug, 'provider_stream_error', {
+          error: error instanceof Error ? error.message : String(error),
+        })
         controller.enqueue(encodeSseChunk(classifyProviderError(error)))
         controller.enqueue(encodeSseChunk('[DONE]'))
         controller.close()

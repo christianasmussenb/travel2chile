@@ -5,6 +5,7 @@ import { toIpHashHint, trackAppEvent } from '@/lib/observability'
 import { guardChatStream } from '@/lib/output-guard'
 import { getDomainMismatchPayload } from '@/lib/domain-guard'
 import { extractSseFrames } from '@/lib/sse'
+import { createStreamDebugContext, describeTextChunk, logStreamDebug } from '@/lib/stream-debug'
 
 function createSseResponse(payload: ChatStreamPayload, status: number) {
   return new Response(`data: ${JSON.stringify(payload)}\n\ndata: [DONE]\n\n`, {
@@ -29,6 +30,11 @@ export async function POST(request: Request) {
   const apiKey = process.env.OPENROUTER_API_KEY || ''
   const ip = request.headers.get('CF-Connecting-IP')
   const ipHashHint = toIpHashHint(ip)
+  const streamDebugEnabled = request.headers.get('X-Travel2Chile-Stream-Debug') === '1'
+  const streamTraceId = crypto.randomUUID().slice(0, 8)
+  const providerDebug = createStreamDebugContext(streamDebugEnabled, streamTraceId, 'provider')
+  const guardDebug = createStreamDebugContext(streamDebugEnabled, streamTraceId, 'guard')
+  const routeDebug = createStreamDebugContext(streamDebugEnabled, streamTraceId, 'route')
 
   try {
     const { env } = await getCloudflareContext({ async: true })
@@ -120,7 +126,13 @@ export async function POST(request: Request) {
     )
   }
 
-  const guardedStream = guardChatStream(createChatStream(messages, apiKey))
+  logStreamDebug(routeDebug, 'request_started', {
+    sessionId,
+    historyCount: history.length,
+    hasBindings: Boolean(db || kv),
+  })
+
+  const guardedStream = guardChatStream(createChatStream(messages, apiKey, providerDebug), guardDebug)
   const [streamForClient, streamForSaving] = guardedStream.tee()
 
   if (db && conversationId) {
@@ -144,6 +156,18 @@ export async function POST(request: Request) {
           if (line.startsWith('data: ') && !line.includes('[DONE]')) {
             try {
               const d = JSON.parse(line.slice(6))
+              if (d.type === 'text' && d.text) {
+                logStreamDebug(routeDebug, 'tee_text_received', {
+                  seq: d.seq ?? null,
+                  ...describeTextChunk(d.text),
+                })
+              }
+              if (d.type === 'error') {
+                logStreamDebug(routeDebug, 'tee_error_received', {
+                  code: d.code ?? null,
+                  retryable: d.retryable ?? null,
+                })
+              }
               if (d.type === 'text' && d.text) full += d.text
               if (d.type === 'error') {
                 hasError = true
@@ -197,6 +221,18 @@ export async function POST(request: Request) {
           if (line.startsWith('data: ') && !line.includes('[DONE]')) {
             try {
               const d = JSON.parse(line.slice(6))
+              if (d.type === 'text' && d.text) {
+                logStreamDebug(routeDebug, 'tee_text_received', {
+                  seq: d.seq ?? null,
+                  ...describeTextChunk(d.text),
+                })
+              }
+              if (d.type === 'error') {
+                logStreamDebug(routeDebug, 'tee_error_received', {
+                  code: d.code ?? null,
+                  retryable: d.retryable ?? null,
+                })
+              }
               if (d.type === 'text' && d.text) full += d.text
               if (d.type === 'error') {
                 hasError = true
@@ -237,6 +273,7 @@ export async function POST(request: Request) {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
+      'X-Chat-Trace-Id': streamTraceId,
     },
   })
 }

@@ -1,5 +1,6 @@
 import { createErrorPayload, type ChatStreamPayload } from './ai'
 import { extractSseFrames } from './sse'
+import { describeTextChunk, logStreamDebug, type StreamDebugContext } from './stream-debug'
 
 const REASONING_PATTERNS = [
   'okay, the user is asking',
@@ -141,7 +142,7 @@ function looksBrokenEnding(text: string) {
   return /\*\*[A-Za-zÁÉÍÓÚáéíóúñÑ]{0,6}$/.test(trimmed) || /\b[CcRr]$/.test(trimmed)
 }
 
-export function guardChatStream(stream: ReadableStream) {
+export function guardChatStream(stream: ReadableStream, debug?: StreamDebugContext) {
   return new ReadableStream<Uint8Array>({
     async start(controller) {
       const reader = stream.getReader()
@@ -158,6 +159,12 @@ export function guardChatStream(stream: ReadableStream) {
         const chunk = done ? decoder.decode() : decoder.decode(value, { stream: true })
         const { frames, remainder } = extractSseFrames(chunk, pendingFrame)
         pendingFrame = remainder
+        logStreamDebug(debug, 'guard_transport_chunk', {
+          done,
+          chunkLength: chunk.length,
+          frameCount: frames.length,
+          remainderLength: remainder.length,
+        })
 
         for (const frame of frames) {
           const line = frame.trim()
@@ -189,12 +196,16 @@ export function guardChatStream(stream: ReadableStream) {
           if (!payload) continue
 
           if (payload.type === 'error') {
+            logStreamDebug(debug, 'guard_forward_error', payload)
             controller.enqueue(encodeSseChunk(payload))
             continue
           }
 
+          logStreamDebug(debug, 'guard_text_received', {
+            seq: textSeq,
+            ...describeTextChunk(payload.text),
+          })
           accumulated += payload.text
-          bufferedText += payload.text
 
           if (looksLikeReasoningLeak(accumulated)) {
             blocked = true
@@ -245,6 +256,7 @@ export function guardChatStream(stream: ReadableStream) {
           }
 
           if (!bufferReleased) {
+            bufferedText += payload.text
             const shouldRelease =
               bufferedText.length >= 120 ||
               /[.!?]\s$/.test(bufferedText) ||
@@ -253,11 +265,19 @@ export function guardChatStream(stream: ReadableStream) {
             if (!shouldRelease) continue
 
             bufferReleased = true
+            logStreamDebug(debug, 'guard_release_buffer', {
+              seq: textSeq,
+              ...describeTextChunk(bufferedText),
+            })
             emitTextChunk(controller, bufferedText, textSeq++)
             bufferedText = ''
             continue
           }
 
+          logStreamDebug(debug, 'guard_emit_text', {
+            seq: textSeq,
+            ...describeTextChunk(payload.text),
+          })
           emitTextChunk(controller, payload.text, textSeq++)
         }
 

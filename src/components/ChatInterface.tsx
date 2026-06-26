@@ -59,6 +59,12 @@ function getSessionId(): string {
   return id
 }
 
+function isStreamDebugEnabled() {
+  if (typeof window === 'undefined') return false
+  const params = new URLSearchParams(window.location.search)
+  return params.get('streamDebug') === '1' || localStorage.getItem('t2c_stream_debug') === '1'
+}
+
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -110,11 +116,19 @@ export default function ChatInterface() {
       setIsStreaming(true)
 
       try {
+        const streamDebugEnabled = isStreamDebugEnabled()
         const res = await fetch('/api/chat', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(streamDebugEnabled ? { 'X-Travel2Chile-Stream-Debug': '1' } : {}),
+          },
           body: JSON.stringify({ message: text, sessionId: sessionId.current }),
         })
+        const traceId = res.headers.get('X-Chat-Trace-Id')
+        if (streamDebugEnabled) {
+          console.debug('[travel2chile][stream]', { traceId, event: 'response_started' })
+        }
 
         const reader = res.body!.getReader()
         const dec = new TextDecoder()
@@ -131,6 +145,15 @@ export default function ChatInterface() {
               try {
                 const d = JSON.parse(line.slice(6)) as ChatEvent | { text?: string; error?: string }
                 if (isTypedChatEvent(d) && d.type === 'text' && d.text) {
+                  if (streamDebugEnabled) {
+                    console.debug('[travel2chile][stream]', {
+                      traceId,
+                      event: 'ui_text_received',
+                      seq: d.seq ?? null,
+                      length: d.text.length,
+                      preview: d.text.replace(/\s+/g, ' ').trim().slice(0, 140),
+                    })
+                  }
                   if (typeof d.seq === 'number') {
                     if (seenSeqsRef.current.has(d.seq)) continue
                     seenSeqsRef.current.add(d.seq)
@@ -146,6 +169,14 @@ export default function ChatInterface() {
                   })
                 }
                 if (isTypedChatEvent(d) && d.type === 'error') {
+                  if (streamDebugEnabled) {
+                    console.debug('[travel2chile][stream]', {
+                      traceId,
+                      event: 'ui_error_received',
+                      code: d.code,
+                      retryable: d.retryable,
+                    })
+                  }
                   setRetryPrompt(d.retryable ? text : null)
                   setMessages((prev) => {
                     const updated = [...prev]
