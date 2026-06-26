@@ -2,7 +2,7 @@ import { getCloudflareContext } from '@opennextjs/cloudflare'
 import { createChatStream, createErrorPayload, type ChatStreamPayload } from '@/lib/ai'
 import { getOrCreateConversation, getHistory, saveMessage } from '@/lib/db'
 import { toIpHashHint, trackAppEvent } from '@/lib/observability'
-import { collectValidatedChatResult, createBufferedSseStream } from '@/lib/output-guard'
+import { guardChatStream } from '@/lib/output-guard'
 import { getDomainMismatchPayload } from '@/lib/domain-guard'
 
 function createSseResponse(payload: ChatStreamPayload, status: number) {
@@ -119,35 +119,111 @@ export async function POST(request: Request) {
     )
   }
 
-  const result = await collectValidatedChatResult(createChatStream(messages, apiKey))
+  const guardedStream = guardChatStream(createChatStream(messages, apiKey))
+  const [streamForClient, streamForSaving] = guardedStream.tee()
 
-  if (result.error) {
-    trackAppEvent('chat_provider_error', {
-      sessionId,
-      conversationId,
-      errorCode: result.error.code,
-      retryable: result.error.retryable,
-      provider: 'openrouter',
-      hasBindings: Boolean(db || kv),
-    })
-    return createSseResponse(result.error, 200)
+  if (db && conversationId) {
+    const dbRef = db
+    const convId = conversationId
+    ;(async () => {
+      let full = ''
+      let hasError = false
+      let lastErrorCode: string | null = null
+      let lastRetryable: boolean | null = null
+      const reader = streamForSaving.getReader()
+      const dec = new TextDecoder()
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = dec.decode(value)
+        for (const line of chunk.split('\n')) {
+          if (line.startsWith('data: ') && !line.includes('[DONE]')) {
+            try {
+              const d = JSON.parse(line.slice(6))
+              if (d.type === 'text' && d.text) full += d.text
+              if (d.type === 'error') {
+                hasError = true
+                lastErrorCode = d.code ?? 'provider_error'
+                lastRetryable = Boolean(d.retryable)
+              }
+              if (!d.type && d.text) full += d.text
+              if (!d.type && d.error) hasError = true
+            } catch {}
+          }
+        }
+      }
+      if (!hasError && full) {
+        await saveMessage(dbRef, convId, 'assistant', full)
+        trackAppEvent('chat_response_completed', {
+          sessionId,
+          conversationId: convId,
+          responseLength: full.length,
+          hasBindings: true,
+          provider: 'openrouter',
+        })
+      }
+      if (hasError) {
+        trackAppEvent('chat_provider_error', {
+          sessionId,
+          conversationId: convId,
+          errorCode: lastErrorCode ?? 'provider_error',
+          retryable: lastRetryable ?? true,
+          provider: 'openrouter',
+          hasBindings: true,
+        })
+      }
+    })()
+  } else {
+    ;(async () => {
+      let full = ''
+      let hasError = false
+      let lastErrorCode: string | null = null
+      let lastRetryable: boolean | null = null
+      const reader = streamForSaving.getReader()
+      const dec = new TextDecoder()
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = dec.decode(value)
+        for (const line of chunk.split('\n')) {
+          if (line.startsWith('data: ') && !line.includes('[DONE]')) {
+            try {
+              const d = JSON.parse(line.slice(6))
+              if (d.type === 'text' && d.text) full += d.text
+              if (d.type === 'error') {
+                hasError = true
+                lastErrorCode = d.code ?? 'provider_error'
+                lastRetryable = Boolean(d.retryable)
+              }
+              if (!d.type && d.text) full += d.text
+              if (!d.type && d.error) hasError = true
+            } catch {}
+          }
+        }
+      }
+      if (!hasError && full) {
+        trackAppEvent('chat_response_completed', {
+          sessionId,
+          conversationId,
+          responseLength: full.length,
+          hasBindings: false,
+          provider: 'openrouter',
+        })
+      }
+      if (hasError) {
+        trackAppEvent('chat_provider_error', {
+          sessionId,
+          conversationId,
+          errorCode: lastErrorCode ?? 'provider_error',
+          retryable: lastRetryable ?? true,
+          provider: 'openrouter',
+          hasBindings: false,
+        })
+      }
+    })()
   }
 
-  if (db && conversationId && result.text) {
-    await saveMessage(db, conversationId, 'assistant', result.text)
-  }
-
-  if (result.text) {
-    trackAppEvent('chat_response_completed', {
-      sessionId,
-      conversationId,
-      responseLength: result.text.length,
-      hasBindings: Boolean(db || kv),
-      provider: 'openrouter',
-    })
-  }
-
-  return new Response(createBufferedSseStream(result.text), {
+  return new Response(streamForClient, {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',

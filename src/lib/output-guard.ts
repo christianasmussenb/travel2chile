@@ -111,86 +111,162 @@ function looksBrokenEnding(text: string) {
   return /\*\*[A-Za-zÁÉÍÓÚáéíóúñÑ]{0,6}$/.test(trimmed) || /\b[CcRr]$/.test(trimmed)
 }
 
-function validateModelText(text: string): Extract<ChatStreamPayload, { type: 'error' }> | null {
-  if (looksLikeReasoningLeak(text)) {
-    return createErrorPayload(
-      'invalid_model_output',
-      'El modelo devolvió una respuesta inválida. Intenta nuevamente.',
-      true
-    )
-  }
-
-  if (looksCorrupted(text)) {
-    return createErrorPayload(
-      'invalid_model_output',
-      'El modelo devolvió contenido inconsistente. Intenta nuevamente.',
-      true
-    )
-  }
-
-  if (looksRepeatedOrRestarted(text)) {
-    return createErrorPayload(
-      'invalid_model_output',
-      'La respuesta del modelo se reinició o repitió de forma anómala. Intenta nuevamente.',
-      true
-    )
-  }
-
-  if (looksTruncated(text) || looksBrokenEnding(text)) {
-    return createErrorPayload(
-      'invalid_model_output',
-      'La respuesta del modelo llegó incompleta. Intenta nuevamente.',
-      true
-    )
-  }
-
-  return null
-}
-
-export async function collectValidatedChatResult(stream: ReadableStream) {
-  const reader = stream.getReader()
-  const decoder = new TextDecoder()
-  let fullText = ''
-  let providerError: Extract<ChatStreamPayload, { type: 'error' }> | null = null
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-
-    const chunk = decoder.decode(value)
-    for (const line of chunk.split('\n')) {
-      const payload = parseSseLine(line)
-      if (!payload) continue
-
-      if (payload.type === 'error') {
-        providerError = payload
-        continue
-      }
-
-      fullText += payload.text
-    }
-  }
-
-  if (providerError) {
-    return { text: '', error: providerError }
-  }
-
-  const validationError = validateModelText(fullText)
-  if (validationError) {
-    return { text: '', error: validationError }
-  }
-
-  return { text: fullText, error: null }
-}
-
-export function createBufferedSseStream(text: string) {
+export function guardChatStream(stream: ReadableStream) {
   return new ReadableStream<Uint8Array>({
-    start(controller) {
-      const chunks = text.match(/.{1,220}(\s|$)/g) ?? [text]
-      for (const chunk of chunks) {
-        controller.enqueue(encodeSseChunk({ type: 'text', text: chunk }))
+    async start(controller) {
+      const reader = stream.getReader()
+      const decoder = new TextDecoder()
+      let accumulated = ''
+      let bufferedText = ''
+      let bufferReleased = false
+      let blocked = false
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value)
+        for (const line of chunk.split('\n')) {
+          if (line === 'data: [DONE]') {
+            if (!blocked && bufferedText && !looksTruncated(accumulated) && !looksBrokenEnding(accumulated)) {
+              controller.enqueue(encodeSseChunk({ type: 'text', text: bufferedText }))
+              bufferedText = ''
+            }
+
+            if (!blocked && (looksTruncated(accumulated) || looksBrokenEnding(accumulated))) {
+              blocked = true
+              controller.enqueue(
+                encodeSseChunk(
+                  createErrorPayload(
+                    'invalid_model_output',
+                    'La respuesta del modelo llegó incompleta. Intenta nuevamente.',
+                    true
+                  )
+                )
+              )
+            }
+
+            controller.enqueue(encodeSseChunk('[DONE]'))
+            controller.close()
+            return
+          }
+
+          const payload = parseSseLine(line)
+          if (!payload) continue
+
+          if (payload.type === 'error') {
+            controller.enqueue(encodeSseChunk(payload))
+            continue
+          }
+
+          accumulated += payload.text
+          bufferedText += payload.text
+
+          if (looksLikeReasoningLeak(accumulated)) {
+            blocked = true
+            controller.enqueue(
+              encodeSseChunk(
+                createErrorPayload(
+                  'invalid_model_output',
+                  'El modelo devolvió una respuesta inválida. Intenta nuevamente.',
+                  true
+                )
+              )
+            )
+            controller.enqueue(encodeSseChunk('[DONE]'))
+            controller.close()
+            return
+          }
+
+          if (looksCorrupted(accumulated)) {
+            blocked = true
+            controller.enqueue(
+              encodeSseChunk(
+                createErrorPayload(
+                  'invalid_model_output',
+                  'El modelo devolvió contenido inconsistente. Intenta nuevamente.',
+                  true
+                )
+              )
+            )
+            controller.enqueue(encodeSseChunk('[DONE]'))
+            controller.close()
+            return
+          }
+
+          if (looksRepeatedOrRestarted(accumulated)) {
+            blocked = true
+            controller.enqueue(
+              encodeSseChunk(
+                createErrorPayload(
+                  'invalid_model_output',
+                  'La respuesta del modelo se reinició o repitió de forma anómala. Intenta nuevamente.',
+                  true
+                )
+              )
+            )
+            controller.enqueue(encodeSseChunk('[DONE]'))
+            controller.close()
+            return
+          }
+
+          if (!bufferReleased) {
+            const shouldRelease =
+              bufferedText.length >= 120 ||
+              /[.!?]\s$/.test(bufferedText) ||
+              bufferedText.includes('\n')
+
+            if (!shouldRelease) continue
+
+            bufferReleased = true
+            controller.enqueue(encodeSseChunk({ type: 'text', text: bufferedText }))
+            bufferedText = ''
+            continue
+          }
+
+          controller.enqueue(encodeSseChunk({ type: 'text', text: payload.text }))
+        }
       }
-      controller.enqueue(encodeSseChunk('[DONE]'))
+
+      if (!blocked) {
+        if (bufferedText) {
+          controller.enqueue(encodeSseChunk({ type: 'text', text: bufferedText }))
+        }
+        if (looksTruncated(accumulated) || looksBrokenEnding(accumulated)) {
+          controller.enqueue(
+            encodeSseChunk(
+              createErrorPayload(
+                'invalid_model_output',
+                'La respuesta del modelo llegó incompleta. Intenta nuevamente.',
+                true
+              )
+            )
+          )
+        }
+        if (looksCorrupted(accumulated)) {
+          controller.enqueue(
+            encodeSseChunk(
+              createErrorPayload(
+                'invalid_model_output',
+                'El modelo devolvió contenido inconsistente. Intenta nuevamente.',
+                true
+              )
+            )
+          )
+        }
+        if (looksRepeatedOrRestarted(accumulated)) {
+          controller.enqueue(
+            encodeSseChunk(
+              createErrorPayload(
+                'invalid_model_output',
+                'La respuesta del modelo se reinició o repitió de forma anómala. Intenta nuevamente.',
+                true
+              )
+            )
+          )
+        }
+        controller.enqueue(encodeSseChunk('[DONE]'))
+      }
       controller.close()
     },
   })

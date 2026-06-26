@@ -22,7 +22,7 @@ Travel2Chile v4 ya dejó de ser un starter y pasó a ser una aplicación funcion
 
 - Se construyó una landing que presenta el producto y dirige al chat.
 - El chat permite preguntas libres sobre destinos, temporadas, rutas y presupuesto.
-- La respuesta del modelo se entrega al cliente por SSE después de validación server-side.
+- La respuesta del modelo se entrega al cliente por SSE con guardas de dominio y calidad durante el stream.
 - Hay sugerencias iniciales para orientar el primer uso.
 - Existe limpieza de conversación y navegación de vuelta al inicio.
 - La UI permite reintentar una respuesta fallida sin duplicar el mensaje del usuario.
@@ -70,7 +70,7 @@ Travel2Chile v4 ya dejó de ser un starter y pasó a ser una aplicación funcion
 
 ## Pendientes relevantes
 
-- Validar en producción, con tráfico real, que el flujo `buffer + validar + emitir` elimina las respuestas rotas más frecuentes.
+- Validar en producción, con tráfico real, que el streaming controlado actual reduce de forma suficiente las respuestas rotas más frecuentes.
 - Exportar o integrar observabilidad a una plataforma externa si el equipo necesita retención, alertas o dashboards fuera de Cloudflare.
 - Agregar métricas de producto más específicas si el negocio lo requiere.
 - Revisar si conviene persistir más contexto de conversación o segmentar por tipo de viaje.
@@ -87,7 +87,7 @@ Travel2Chile v4 ya dejó de ser un starter y pasó a ser una aplicación funcion
 
 - Deploy automatizado a Cloudflare implementado.
 - Manejo de errores de OpenRouter endurecido.
-- Validación server-side de la respuesta completa antes de emitirla al cliente.
+- Streaming controlado con guardas de salida durante la generación.
 - Guardas contra fuera de dominio, reasoning leak, truncados, repeticiones y salidas corruptas.
 - Retry de UI para respuestas fallidas.
 - Observabilidad mínima con logs estructurados del Worker.

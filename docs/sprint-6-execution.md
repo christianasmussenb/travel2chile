@@ -17,7 +17,7 @@ Llevar Travel2Chile desde un estado funcional y probado a un estado operable con
 - El deploy automático a Cloudflare quedó implementado y documentado.
 - El manejo de errores del proveedor quedó endurecido.
 - La observabilidad mínima quedó activa con eventos estructurados del Worker.
-- La respuesta del modelo ahora se valida completa antes de ser mostrada o persistida.
+- La respuesta del modelo ahora se transmite con streaming controlado y guardas de salida.
 - La UI ofrece retry para respuestas fallidas recuperables.
 
 ## Alcance del sprint
@@ -79,7 +79,7 @@ Llevar Travel2Chile desde un estado funcional y probado a un estado operable con
    - respuestas truncadas;
    - respuestas reiniciadas o repetidas;
    - contenido semánticamente corrupto.
-7. Se cambió el flujo del chat a `buffer + validar + emitir`.
+7. Se endureció el flujo del chat con streaming controlado y retry de UI, manteniendo guardas de salida sin bloquear la experiencia.
 8. Se agregó retry de UI para errores recuperables.
 9. Se validó todo con `lint`, `test`, `build` y `test:ui`.
 

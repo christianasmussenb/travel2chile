@@ -1,6 +1,6 @@
 # Travel2Chile v4
 
-Travel2Chile es un asistente de viajes en español enfocado en Chile. La aplicación combina una landing pública, un chat con validación server-side de respuestas, persistencia de conversaciones por sesión y despliegue sobre Next.js + OpenNext para Cloudflare.
+Travel2Chile es un asistente de viajes en español enfocado en Chile. La aplicación combina una landing pública, un chat con streaming controlado y guardas de salida, persistencia de conversaciones por sesión y despliegue sobre Next.js + OpenNext para Cloudflare.
 
 ## Documentación
 
@@ -37,9 +37,9 @@ Travel2Chile es un asistente de viajes en español enfocado en Chile. La aplicac
 3. La API intenta resolver bindings de Cloudflare.
 4. Si hay D1, carga historial y guarda el mensaje del usuario.
 5. Si hay KV, aplica rate limit por IP.
-6. La respuesta de OpenRouter se reúne y valida en el backend.
-7. Solo si la respuesta es válida, se emite como SSE al cliente.
-8. Si hay D1, la respuesta final del asistente también se persiste.
+6. La respuesta de OpenRouter se transmite como SSE al cliente con guardas de dominio y calidad.
+7. Si la salida detecta errores o contenido inválido, se transforma en un error controlado.
+8. Si hay D1, la respuesta final válida del asistente también se persiste.
 9. `GET /api/history` permite recuperar el historial de la sesión actual.
 10. `DELETE /api/history` limpia la conversación de esa sesión.
 
@@ -92,7 +92,7 @@ Abrir `http://localhost:3000`.
 ### Qué esperar en local
 
 - La UI del chat funciona.
-- La respuesta se muestra con indicador de carga y luego se emite al cliente en SSE ya validado.
+- La respuesta se muestra en streaming mientras llega, con detección de errores y salidas inválidas.
 - Si no hay bindings reales de Cloudflare, el historial y el rate limit quedan desactivados o en modo no-op.
 - La aplicación sigue respondiendo mientras exista `OPENROUTER_API_KEY`.
 

@@ -7,7 +7,7 @@ _Actualizado al 24 de junio de 2026._
 - OpenNext con Cloudflare funciona bien para este caso, pero requiere cuidar la compatibilidad de tipos y runtime.
 - Separar la UI del chat de la lógica de API facilita testear y mantener el sistema.
 - El patrón SSE sigue siendo útil, pero streamear ciegamente la salida del modelo degrada la calidad cuando el proveedor entrega respuestas corruptas o truncadas.
-- Para un asistente de nicho, es más robusto `bufferizar + validar + emitir` que privilegiar streaming token a token.
+- El punto medio más usable para este producto es un streaming controlado con guardas de salida, no un buffering total que degrade demasiado la experiencia del chat.
 
 ## Tipado y entorno
 
@@ -21,7 +21,7 @@ _Actualizado al 24 de junio de 2026._
 - D1 encaja bien para historial liviano por sesión.
 - Conviene desacoplar la lógica de persistencia del transporte HTTP para poder probarla con dobles in-memory.
 - La ventana de 24 horas para reutilizar conversación es útil como regla operativa simple, pero debe documentarse para evitar confusión.
-- No conviene persistir respuestas parciales o fallidas del modelo; es mejor guardar solo salidas completas y validadas.
+- No conviene persistir respuestas parciales o fallidas del modelo; es mejor guardar solo salidas completas que hayan atravesado las guardas del stream.
 
 ## Observabilidad
 
