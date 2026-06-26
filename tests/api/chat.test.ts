@@ -134,6 +134,47 @@ describe('POST /api/chat', () => {
     ])
   })
 
+  it('handles SSE frames split across transport chunks without losing or duplicating text', async () => {
+    const db = new MockD1Database()
+    const kv = new MockKVNamespace()
+
+    mocks.getCloudflareContext.mockResolvedValue({
+      env: {
+        travel2chile_db: db,
+        travel2chile_kv: kv,
+      },
+    })
+    mocks.createChatStream.mockReturnValue(
+      createSseStream([
+        'data: {"type":"text","text":"Hola',
+        ' Chile"}\n\n',
+        'data: {"type":"text","text":" y Patagonia"}\n\n',
+        'data: [DO',
+        'NE]\n\n',
+      ])
+    )
+
+    const response = await POST(
+      new Request('http://localhost/api/chat', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'CF-Connecting-IP': '127.0.0.1',
+        },
+        body: JSON.stringify({ message: 'Resume el viaje', sessionId: 'session-split-sse' }),
+      })
+    )
+
+    expect(response.status).toBe(200)
+    const { text } = await readResponseChunks(response)
+    expect(text).toContain('Hola Chile')
+    expect(text).toContain('y Patagonia')
+
+    await waitFor(
+      () => db.messages.some((message) => message.role === 'assistant' && message.content === 'Hola Chile y Patagonia')
+    )
+  })
+
   it('applies rate limiting when KV is available', async () => {
     const db = new MockD1Database()
     const kv = new MockKVNamespace()
@@ -379,6 +420,55 @@ describe('POST /api/chat', () => {
         conversation_id: expect.any(String),
         role: 'user',
         content: 'Dame un plan en bici por Puerto Varas',
+        created_at: expect.any(String),
+      },
+    ])
+  })
+
+  it('blocks a long response that restarts from the beginning mid-stream', async () => {
+    const db = new MockD1Database()
+    const kv = new MockKVNamespace()
+
+    mocks.getCloudflareContext.mockResolvedValue({
+      env: {
+        travel2chile_db: db,
+        travel2chile_kv: kv,
+      },
+    })
+    mocks.createChatStream.mockReturnValue(
+      createSseStream([
+        'data: {"type":"text","text":"¡Claro! Un viaje de 7 días en Chile puede adaptarse a tu presupuesto con opciones variadas.\\n\\nPresupuesto bajo (económico)\\nAlojamiento: Hostales o departamentos compartidos.\\n"}\n\n',
+        'data: {"type":"text","text":"Comidas: Mercados y restaurantes locales.\\n\\nPresupuesto medio (cómodo)\\nAlojamiento: Hoteles 3 estrellas.\\n"}\n\n',
+        'data: {"type":"text","text":"¡Claro! Un viaje de 7 días en Chile puede adaptarse a tu presupuesto con opciones variadas.\\n\\nPresupuesto bajo (económico)\\nAlojamiento: Hostales o departamentos compartidos.\\n"}\n\n',
+        'data: [DONE]\n\n',
+      ])
+    )
+
+    const response = await POST(
+      new Request('http://localhost/api/chat', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'CF-Connecting-IP': '127.0.0.1',
+        },
+        body: JSON.stringify({
+          message: 'Presupuesto 7 días en Chile',
+          sessionId: 'session-restarted-answer',
+        }),
+      })
+    )
+
+    expect(response.status).toBe(200)
+    const { text } = await readResponseChunks(response)
+    expect(text).toContain('"code":"invalid_model_output"')
+
+    await waitFor(() => db.messages.length >= 1)
+    expect(db.messages).toEqual([
+      {
+        id: expect.any(String),
+        conversation_id: expect.any(String),
+        role: 'user',
+        content: 'Presupuesto 7 días en Chile',
         created_at: expect.any(String),
       },
     ])

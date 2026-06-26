@@ -1,6 +1,6 @@
 # Estado del proyecto
 
-_Estado verificado localmente al 24 de junio de 2026. Documentación actualizada tras el cierre técnico del Sprint 6._
+_Estado verificado localmente al 26 de junio de 2026. Documentación actualizada tras el cierre técnico del Sprint 6 y la definición operativa del Sprint 7._
 
 ## Resumen ejecutivo
 
@@ -71,7 +71,7 @@ Travel2Chile v4 ya dejó de ser un starter y pasó a ser una aplicación funcion
 ## Pendientes relevantes
 
 - Validar en producción, con tráfico real, que el streaming controlado actual reduce de forma suficiente las respuestas rotas más frecuentes.
-- Exportar o integrar observabilidad a una plataforma externa si el equipo necesita retención, alertas o dashboards fuera de Cloudflare.
+- Activar el job de `Logpush` a `New Relic` definido en [`docs/monitoring-new-relic.md`](/Users/cab/VSCODE/travel2chile/docs/monitoring-new-relic.md).
 - Agregar métricas de producto más específicas si el negocio lo requiere.
 - Revisar si conviene persistir más contexto de conversación o segmentar por tipo de viaje.
 - Definir si se mantiene `openrouter/free` o se migra a un modelo más estable para respuestas largas.
@@ -82,6 +82,7 @@ Travel2Chile v4 ya dejó de ser un starter y pasó a ser una aplicación funcion
 - El chat ya clasifica errores del proveedor y los muestra de forma distinguible.
 - La app emite eventos estructurados del Worker para sesiones, mensajes, respuestas completas, rate limit, errores del proveedor y limpieza de historial.
 - Los errores recuperables muestran `Reintentar respuesta` en UI y quedan visibles como eventos del Worker.
+- La alternativa elegida para monitoreo externo es `New Relic` por `Logpush` directo desde Cloudflare, sin collector intermedio.
 
 ## Cierre del Sprint 6
 

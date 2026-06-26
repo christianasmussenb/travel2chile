@@ -1,4 +1,5 @@
 import { createErrorPayload, type ChatStreamPayload } from './ai'
+import { extractSseFrames } from './sse'
 
 const REASONING_PATTERNS = [
   'okay, the user is asking',
@@ -102,6 +103,17 @@ function looksRepeatedOrRestarted(text: string) {
     seen.add(line)
   }
 
+  const firstParagraph = normalized
+    .split('\n\n')
+    .map((part) => part.trim())
+    .find((part) => part.length >= 40)
+
+  if (firstParagraph) {
+    const repeatedPrefix = firstParagraph.slice(0, Math.min(firstParagraph.length, 80))
+    const nextIndex = normalized.indexOf(repeatedPrefix, repeatedPrefix.length + 40)
+    if (nextIndex !== -1) return true
+  }
+
   return false
 }
 
@@ -118,15 +130,18 @@ export function guardChatStream(stream: ReadableStream) {
       const decoder = new TextDecoder()
       let accumulated = ''
       let bufferedText = ''
+      let pendingFrame = ''
       let bufferReleased = false
       let blocked = false
 
       while (true) {
         const { done, value } = await reader.read()
-        if (done) break
+        const chunk = done ? decoder.decode() : decoder.decode(value, { stream: true })
+        const { frames, remainder } = extractSseFrames(chunk, pendingFrame)
+        pendingFrame = remainder
 
-        const chunk = decoder.decode(value)
-        for (const line of chunk.split('\n')) {
+        for (const frame of frames) {
+          const line = frame.trim()
           if (line === 'data: [DONE]') {
             if (!blocked && bufferedText && !looksTruncated(accumulated) && !looksBrokenEnding(accumulated)) {
               controller.enqueue(encodeSseChunk({ type: 'text', text: bufferedText }))
@@ -226,6 +241,8 @@ export function guardChatStream(stream: ReadableStream) {
 
           controller.enqueue(encodeSseChunk({ type: 'text', text: payload.text }))
         }
+
+        if (done) break
       }
 
       if (!blocked) {

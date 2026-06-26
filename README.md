@@ -8,6 +8,7 @@ Travel2Chile es un asistente de viajes en español enfocado en Chile. La aplicac
 - [`docs/lessons-learned.md`](/Users/cab/VSCODE/travel2chile/docs/lessons-learned.md): aprendizajes técnicos y operativos.
 - [`docs/sprints.md`](/Users/cab/VSCODE/travel2chile/docs/sprints.md): plan de sprints.
 - [`docs/sprint-6-execution.md`](/Users/cab/VSCODE/travel2chile/docs/sprint-6-execution.md): plan ejecutable del siguiente sprint.
+- [`docs/monitoring-new-relic.md`](/Users/cab/VSCODE/travel2chile/docs/monitoring-new-relic.md): implementación recomendada de monitoreo externo.
 - [`docs/testing.md`](/Users/cab/VSCODE/travel2chile/docs/testing.md): estrategia de pruebas y verificación.
 
 ## Qué resuelve
@@ -153,6 +154,7 @@ Comportamiento del pipeline:
 - `observability.enabled` ya está activado en [`wrangler.jsonc`](/Users/cab/VSCODE/travel2chile/wrangler.jsonc), así que Cloudflare puede registrar trazas del Worker y sus invocaciones.
 - Cuando `CLOUDFLARE_WEB_ANALYTICS_TOKEN` está definido, la app inyecta el beacon de Cloudflare Web Analytics y reporta tráfico de página desde el navegador.
 - Para ver trazas de uso completas conviene usar ambas capas: observabilidad del Worker y Web Analytics del frontend.
+- El camino recomendado para monitoreo externo del Sprint 7 quedó documentado en [`docs/monitoring-new-relic.md`](/Users/cab/VSCODE/travel2chile/docs/monitoring-new-relic.md).
 
 ## Esquema de datos
 

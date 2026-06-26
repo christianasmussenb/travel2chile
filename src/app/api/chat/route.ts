@@ -4,6 +4,7 @@ import { getOrCreateConversation, getHistory, saveMessage } from '@/lib/db'
 import { toIpHashHint, trackAppEvent } from '@/lib/observability'
 import { guardChatStream } from '@/lib/output-guard'
 import { getDomainMismatchPayload } from '@/lib/domain-guard'
+import { extractSseFrames } from '@/lib/sse'
 
 function createSseResponse(payload: ChatStreamPayload, status: number) {
   return new Response(`data: ${JSON.stringify(payload)}\n\ndata: [DONE]\n\n`, {
@@ -130,13 +131,16 @@ export async function POST(request: Request) {
       let hasError = false
       let lastErrorCode: string | null = null
       let lastRetryable: boolean | null = null
+      let pendingFrame = ''
       const reader = streamForSaving.getReader()
       const dec = new TextDecoder()
       while (true) {
         const { done, value } = await reader.read()
-        if (done) break
-        const chunk = dec.decode(value)
-        for (const line of chunk.split('\n')) {
+        const chunk = done ? dec.decode() : dec.decode(value, { stream: true })
+        const { frames, remainder } = extractSseFrames(chunk, pendingFrame)
+        pendingFrame = remainder
+        for (const frame of frames) {
+          const line = frame.trim()
           if (line.startsWith('data: ') && !line.includes('[DONE]')) {
             try {
               const d = JSON.parse(line.slice(6))
@@ -151,6 +155,7 @@ export async function POST(request: Request) {
             } catch {}
           }
         }
+        if (done) break
       }
       if (!hasError && full) {
         await saveMessage(dbRef, convId, 'assistant', full)
@@ -179,13 +184,16 @@ export async function POST(request: Request) {
       let hasError = false
       let lastErrorCode: string | null = null
       let lastRetryable: boolean | null = null
+      let pendingFrame = ''
       const reader = streamForSaving.getReader()
       const dec = new TextDecoder()
       while (true) {
         const { done, value } = await reader.read()
-        if (done) break
-        const chunk = dec.decode(value)
-        for (const line of chunk.split('\n')) {
+        const chunk = done ? dec.decode() : dec.decode(value, { stream: true })
+        const { frames, remainder } = extractSseFrames(chunk, pendingFrame)
+        pendingFrame = remainder
+        for (const frame of frames) {
+          const line = frame.trim()
           if (line.startsWith('data: ') && !line.includes('[DONE]')) {
             try {
               const d = JSON.parse(line.slice(6))
@@ -200,6 +208,7 @@ export async function POST(request: Request) {
             } catch {}
           }
         }
+        if (done) break
       }
       if (!hasError && full) {
         trackAppEvent('chat_response_completed', {

@@ -140,12 +140,16 @@ Convertir el estado actual en una operación repetible, observable y más resist
 
 Sacar la observabilidad fuera del dashboard de Cloudflare y convertirla en monitoreo accionable con retención, alertas y dashboards.
 
+### Decisión tomada
+
+- Stack elegido: `New Relic`.
+- Integración objetivo: `Cloudflare Logpush -> workers_trace_events -> New Relic`.
+- Motivo: menor esfuerzo de implementación y menor complejidad operativa que una cadena `Grafana/Loki` con endpoint intermedio.
+
 ### Entregables
 
 - Decisión de stack externo de observabilidad:
-  - New Relic;
-  - Grafana/Loki;
-  - u otra opción equivalente.
+  - New Relic.
 - Exportación de logs/eventos desde Cloudflare.
 - Dashboard mínimo con:
   - volumen de mensajes;
