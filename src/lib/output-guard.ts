@@ -47,6 +47,10 @@ function encodeSseChunk(payload: ChatStreamPayload | '[DONE]') {
   return new TextEncoder().encode(`data: ${typeof payload === 'string' ? payload : JSON.stringify(payload)}\n\n`)
 }
 
+function emitTextChunk(controller: ReadableStreamDefaultController<Uint8Array>, text: string, seq: number) {
+  controller.enqueue(encodeSseChunk({ type: 'text', text, seq }))
+}
+
 function parseSseLine(line: string): ChatStreamPayload | null {
   if (!line.startsWith('data: ') || line.includes('[DONE]')) return null
 
@@ -147,6 +151,7 @@ export function guardChatStream(stream: ReadableStream) {
       let pendingFrame = ''
       let bufferReleased = false
       let blocked = false
+      let textSeq = 0
 
       while (true) {
         const { done, value } = await reader.read()
@@ -158,7 +163,7 @@ export function guardChatStream(stream: ReadableStream) {
           const line = frame.trim()
           if (line === 'data: [DONE]') {
             if (!blocked && bufferedText && !looksTruncated(accumulated) && !looksBrokenEnding(accumulated)) {
-              controller.enqueue(encodeSseChunk({ type: 'text', text: bufferedText }))
+              emitTextChunk(controller, bufferedText, textSeq++)
               bufferedText = ''
             }
 
@@ -248,12 +253,12 @@ export function guardChatStream(stream: ReadableStream) {
             if (!shouldRelease) continue
 
             bufferReleased = true
-            controller.enqueue(encodeSseChunk({ type: 'text', text: bufferedText }))
+            emitTextChunk(controller, bufferedText, textSeq++)
             bufferedText = ''
             continue
           }
 
-          controller.enqueue(encodeSseChunk({ type: 'text', text: payload.text }))
+          emitTextChunk(controller, payload.text, textSeq++)
         }
 
         if (done) break
@@ -261,7 +266,7 @@ export function guardChatStream(stream: ReadableStream) {
 
       if (!blocked) {
         if (bufferedText) {
-          controller.enqueue(encodeSseChunk({ type: 'text', text: bufferedText }))
+          emitTextChunk(controller, bufferedText, textSeq++)
         }
         if (looksTruncated(accumulated) || looksBrokenEnding(accumulated)) {
           controller.enqueue(

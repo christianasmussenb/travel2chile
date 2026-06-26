@@ -11,8 +11,8 @@ interface Message {
 }
 
 type ChatEvent =
-  | { type: 'text'; text: string }
-  | { type: 'error'; code: string; message: string; retryable: boolean }
+  | { type: 'text'; text: string; seq?: number }
+  | { type: 'error'; code: string; message: string; retryable: boolean; seq?: number }
 
 function isTypedChatEvent(value: unknown): value is ChatEvent {
   return Boolean(
@@ -69,6 +69,7 @@ export default function ChatInterface() {
   const sessionId = useRef('')
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const seenSeqsRef = useRef<Set<number>>(new Set())
 
   useEffect(() => {
     sessionId.current = getSessionId()
@@ -91,6 +92,7 @@ export default function ChatInterface() {
       if (!text.trim() || isStreaming) return
       setShowSuggested(false)
       setRetryPrompt(null)
+      seenSeqsRef.current = new Set()
       if (options?.retry) {
         setMessages((prev) => {
           const updated = [...prev]
@@ -129,6 +131,10 @@ export default function ChatInterface() {
               try {
                 const d = JSON.parse(line.slice(6)) as ChatEvent | { text?: string; error?: string }
                 if (isTypedChatEvent(d) && d.type === 'text' && d.text) {
+                  if (typeof d.seq === 'number') {
+                    if (seenSeqsRef.current.has(d.seq)) continue
+                    seenSeqsRef.current.add(d.seq)
+                  }
                   setRetryPrompt(null)
                   setMessages((prev) => {
                     const updated = [...prev]

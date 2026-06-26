@@ -33,12 +33,13 @@ export type ChatErrorCode =
   | 'network_error'
 
 export type ChatStreamPayload =
-  | { type: 'text'; text: string }
+  | { type: 'text'; text: string; seq?: number }
   | {
       type: 'error'
       code: ChatErrorCode
       message: string
       retryable: boolean
+      seq?: number
     }
 
 function encodeSseChunk(payload: ChatStreamPayload | '[DONE]') {
