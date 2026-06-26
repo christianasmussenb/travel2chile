@@ -38,7 +38,7 @@ Travel2Chile es un asistente de viajes en español enfocado en Chile. La aplicac
 3. La API intenta resolver bindings de Cloudflare.
 4. Si hay D1, carga historial y guarda el mensaje del usuario.
 5. Si hay KV, aplica rate limit por IP.
-6. La respuesta de OpenRouter se transmite como SSE al cliente con guardas de dominio y calidad.
+6. La respuesta del proveedor activo se transmite como SSE al cliente con guardas de dominio y calidad.
 7. Si la salida detecta errores o contenido inválido, se transforma en un error controlado.
 8. Si hay D1, la respuesta final válida del asistente también se persiste.
 9. `GET /api/history` permite recuperar el historial de la sesión actual.
@@ -59,7 +59,7 @@ Travel2Chile es un asistente de viajes en español enfocado en Chile. La aplicac
 - `NVIDIA_API_KEY`: obligatoria si `AI_PROVIDER=nvidia`.
 - `NVIDIA_MODEL`: opcional. Por defecto `nvidia/nemotron-3-ultra-550b-a55b`.
 - `NVIDIA_BASE_URL`: opcional. Por defecto `https://integrate.api.nvidia.com/v1`.
-- `NVIDIA_MAX_TOKENS`: opcional. Por defecto `4096`.
+- `NVIDIA_MAX_TOKENS`: opcional. Por defecto `1536`.
 - `NVIDIA_TEMPERATURE`: opcional. Por defecto `0.7`.
 - `NVIDIA_TOP_P`: opcional. Por defecto `0.95`.
 - `NVIDIA_ENABLE_THINKING`: opcional. `1` para habilitar reasoning del endpoint de NVIDIA.
@@ -97,6 +97,7 @@ Para probar NVIDIA:
 
 ```bash
 AI_PROVIDER=nvidia
+DISABLE_CLOUDFLARE_BINDINGS_IN_DEV=1
 NVIDIA_API_KEY=tu_clave
 NVIDIA_MODEL=nvidia/nemotron-3-ultra-550b-a55b
 ```
@@ -115,6 +116,7 @@ Abrir `http://localhost:3000`.
 - La respuesta se muestra en streaming mientras llega, con detección de errores y salidas inválidas.
 - Si no hay bindings reales de Cloudflare, el historial y el rate limit quedan desactivados o en modo no-op.
 - La aplicación sigue respondiendo mientras exista la API key del proveedor configurado.
+- Si `DISABLE_CLOUDFLARE_BINDINGS_IN_DEV=1`, `next dev` omite D1/KV aunque el runtime intente establecer conexión remota. Es la opción recomendada para probar el proveedor de IA sin interferencia de Cloudflare local.
 
 ## Preview y despliegue
 

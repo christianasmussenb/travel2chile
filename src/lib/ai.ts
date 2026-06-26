@@ -157,8 +157,7 @@ export function resolveAIConfigFromEnv(env = process.env): AIConfig {
       apiKey: env.NVIDIA_API_KEY || '',
       model: env.NVIDIA_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b',
       baseURL: env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1',
-      title: 'Travel2Chile',
-      maxTokens: Number(env.NVIDIA_MAX_TOKENS || 4096),
+      maxTokens: Number(env.NVIDIA_MAX_TOKENS || 1536),
       temperature: Number(env.NVIDIA_TEMPERATURE || 0.7),
       topP: Number(env.NVIDIA_TOP_P || 0.95),
       enableThinking: env.NVIDIA_ENABLE_THINKING === '1',
@@ -213,37 +212,63 @@ export function createChatStream(messages: Message[], config: AIConfig, debug?: 
             { role: 'system', content: SYSTEM_PROMPT },
             ...messages.map((m) => ({ role: m.role, content: m.content })),
           ],
-          ...(config.provider === 'nvidia'
+          ...(config.provider === 'nvidia' && config.enableThinking
             ? {
                 extra_body: {
-                  ...(config.enableThinking ? { chat_template_kwargs: { enable_thinking: true } } : {}),
-                  ...(config.enableThinking && config.reasoningBudget
-                    ? { reasoning_budget: config.reasoningBudget }
-                    : {}),
+                  chat_template_kwargs: { enable_thinking: true },
+                  ...(config.reasoningBudget ? { reasoning_budget: config.reasoningBudget } : {}),
                 },
               }
             : {}),
         })
 
         for await (const chunk of stream) {
-          const text = chunk.choices[0]?.delta?.content || ''
+          const choice = chunk.choices?.[0]
+          if (!choice) {
+            logStreamDebug(debug, 'provider_chunk_skipped', {
+              reason: 'missing_choice',
+              choicesLength: chunk.choices?.length ?? 0,
+            })
+            continue
+          }
+
+          const text = choice.delta?.content || ''
           logStreamDebug(debug, 'provider_chunk_received', {
-            finishReason: chunk.choices[0]?.finish_reason ?? null,
+            finishReason: choice.finish_reason ?? null,
             ...describeTextChunk(text),
           })
           if (text) {
             controller.enqueue(encodeSseChunk({ type: 'text', text }))
           }
-          if (chunk.choices[0]?.finish_reason === 'stop') break
+          if (choice.finish_reason === 'stop') break
         }
 
         logStreamDebug(debug, 'provider_stream_done')
         controller.enqueue(encodeSseChunk('[DONE]'))
         controller.close()
       } catch (error) {
+        const apiError = error as {
+          status?: number
+          code?: string
+          name?: string
+          message?: string
+        }
         logStreamDebug(debug, 'provider_stream_error', {
           error: error instanceof Error ? error.message : String(error),
         })
+        console.error(
+          JSON.stringify({
+            source: 'travel2chile',
+            type: 'provider_error_detail',
+            provider: config.provider,
+            model: config.model,
+            status: apiError?.status ?? null,
+            code: apiError?.code ?? null,
+            name: apiError?.name ?? null,
+            message: apiError?.message ?? String(error),
+            timestamp: new Date().toISOString(),
+          })
+        )
         controller.enqueue(encodeSseChunk(classifyProviderErrorWithConfig(error, config)))
         controller.enqueue(encodeSseChunk('[DONE]'))
         controller.close()

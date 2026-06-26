@@ -98,6 +98,40 @@ describe('POST /api/chat', () => {
     expect(text).toContain('NVIDIA no está configurada')
   })
 
+  it('tolerates streamed provider frames without choices', async () => {
+    const db = new MockD1Database()
+    const kv = new MockKVNamespace()
+
+    mocks.getCloudflareContext.mockResolvedValue({
+      env: {
+        travel2chile_db: db,
+        travel2chile_kv: kv,
+      },
+    })
+    mocks.createChatStream.mockReturnValue(
+      createSseStream([
+        'data: {"type":"text","text":"Santiago tiene barrios como Lastarria y Bellavista. "}\n\n',
+        'data: {"type":"text","text":"En 2 días puedes combinar centro histórico y cerros."}\n\n',
+        'data: [DONE]\n\n',
+      ])
+    )
+
+    const response = await POST(
+      new Request('http://localhost/api/chat', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'CF-Connecting-IP': '127.0.0.1',
+        },
+        body: JSON.stringify({ message: '¿Qué hacer en Santiago en 2 días?', sessionId: 'session-nvidia-frames' }),
+      })
+    )
+
+    expect(response.status).toBe(200)
+    const { text } = await readResponseChunks(response)
+    expect(text).toContain('Santiago tiene barrios')
+  })
+
   it('streams assistant text and persists the conversation when bindings exist', async () => {
     const db = new MockD1Database()
     const kv = new MockKVNamespace()

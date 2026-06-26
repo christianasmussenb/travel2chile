@@ -31,17 +31,20 @@ export async function POST(request: Request) {
   const ip = request.headers.get('CF-Connecting-IP')
   const ipHashHint = toIpHashHint(ip)
   const streamDebugEnabled = request.headers.get('X-Travel2Chile-Stream-Debug') === '1'
+  const disableBindingsInDev = process.env.DISABLE_CLOUDFLARE_BINDINGS_IN_DEV === '1'
   const streamTraceId = crypto.randomUUID().slice(0, 8)
   const providerDebug = createStreamDebugContext(streamDebugEnabled, streamTraceId, 'provider')
   const guardDebug = createStreamDebugContext(streamDebugEnabled, streamTraceId, 'guard')
   const routeDebug = createStreamDebugContext(streamDebugEnabled, streamTraceId, 'route')
 
-  try {
-    const { env } = await getCloudflareContext({ async: true })
-    db = env.travel2chile_db
-    kv = env.travel2chile_kv
-  } catch {
-    // Running in local dev — no CF bindings, API key comes from .env.local
+  if (!disableBindingsInDev) {
+    try {
+      const { env } = await getCloudflareContext({ async: true })
+      db = env.travel2chile_db
+      kv = env.travel2chile_kv
+    } catch {
+      // Running in local dev — no CF bindings, API key comes from .env.local
+    }
   }
 
   // Rate limiting (only when KV is available)

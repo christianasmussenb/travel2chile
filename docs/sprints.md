@@ -1,6 +1,6 @@
 # Plan de sprints
 
-_Actualizado al 24 de junio de 2026._
+_Actualizado al 26 de junio de 2026._
 
 ## Sprint 1: estabilización base
 
@@ -134,53 +134,66 @@ Convertir el estado actual en una operación repetible, observable y más resist
 
 - El equipo puede desplegar, diagnosticar y contener respuestas inválidas sin depender de pasos manuales implícitos.
 
-## Sprint 7 recomendado: monitoreo externo y calidad operativa
+## Sprint 7 recomendado: validación productiva de NVIDIA y operación local limpia
 
 ### Objetivo
 
-Sacar la observabilidad fuera del dashboard de Cloudflare y convertirla en monitoreo accionable con retención, alertas y dashboards.
-
-### Decisión tomada
-
-- Stack elegido: `New Relic`.
-- Integración objetivo: `Cloudflare Logpush -> workers_trace_events -> New Relic`.
-- Motivo: menor esfuerzo de implementación y menor complejidad operativa que una cadena `Grafana/Loki` con endpoint intermedio.
+Consolidar el cambio de proveedor a NVIDIA, reducir la fricción del entorno de desarrollo y validar comportamiento real en producción.
 
 ### Entregables
 
-- Decisión de stack externo de observabilidad:
-  - New Relic.
-- Exportación de logs/eventos desde Cloudflare.
+- Producción desplegada con `AI_PROVIDER=nvidia`.
+- `NVIDIA_MAX_TOKENS` ajustado y validado con tráfico real.
+- Confirmación de que el stream no duplica texto en producción.
+- Ruta de desarrollo local documentada con `DISABLE_CLOUDFLARE_BINDINGS_IN_DEV=1`.
+- Checklist operativo de pruebas rápidas para diferenciar errores de proveedor vs errores del runtime local.
+
+### Criterio de salida
+
+- El equipo puede probar, validar y desplegar NVIDIA sin ambigüedad entre `next dev`, runtime Cloudflare local y producción.
+
+## Sprint 8 recomendado: calidad de contenido, latencia y fallback de proveedor
+
+### Objetivo
+
+Reducir latencia y degradaciones del chat, con política explícita de proveedor principal y fallback.
+
+### Entregables
+
+- Evaluación comparativa entre el modelo NVIDIA activo y al menos una alternativa de fallback.
+- Ajustes de prompt y de generación para respuestas largas.
+- Decisión sobre fallback explícito a OpenRouter o segundo modelo NVIDIA.
+- Lista de casos reales problemáticos convertidos en regresiones de prueba.
+- Política clara para itinerarios largos, tablas y comparaciones.
+- Revisión de `max_tokens`, estructura de respuesta y tiempos medios por tipo de consulta.
+
+### Criterio de salida
+
+- Bajan la latencia y la tasa de `invalid_model_output`, y existe un fallback documentado.
+
+## Sprint 9 recomendado: observabilidad externa y métricas de producto
+
+### Objetivo
+
+Salir del puro dashboard operativo y empezar a medir uso real y salud de la app con más profundidad.
+
+### Entregables
+
+- Decisión final sobre si Cloudflare Observability alcanza o si conviene stack externo.
 - Dashboard mínimo con:
   - volumen de mensajes;
   - tasa de errores por tipo;
+  - retries de UI;
   - prompts fuera de dominio;
-  - respuestas inválidas detectadas;
-  - retries iniciados por usuarios.
-- Alertas básicas para alzas anómalas de `chat_provider_error` o `invalid_model_output`.
+  - respuestas inválidas detectadas.
+- Alertas básicas o equivalente operativo.
+- Métricas de producto para evaluar utilidad real del chat.
 
 ### Criterio de salida
 
-- El equipo puede observar la app fuera de Cloudflare y recibir alertas sin inspección manual continua.
+- El equipo puede observar la app de forma operativa y medir salud/uso sin inspección manual continua.
 
-## Sprint 8 recomendado: calidad de contenido y routing de modelos
-
-### Objetivo
-
-Reducir la frecuencia de respuestas pobres o rechazadas mejorando la capa de generación.
-
-### Entregables
-
-- Evaluación comparativa entre el modelo actual y una opción más estable.
-- Ajustes de prompt y de routing por tipo de consulta.
-- Lista de casos reales problemáticos convertidos en regresiones de prueba.
-- Política clara para itinerarios largos, tablas y comparaciones.
-
-### Criterio de salida
-
-- Baja la tasa de `invalid_model_output` y mejoran las respuestas largas en producción.
-
-## Sprint 9 recomendado: memoria útil y producto
+## Sprint 10 recomendado: memoria útil y producto
 
 ### Objetivo
 

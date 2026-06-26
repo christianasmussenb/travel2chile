@@ -19,6 +19,8 @@ Llevar Travel2Chile desde un estado funcional y probado a un estado operable con
 - La observabilidad mínima quedó activa con eventos estructurados del Worker.
 - La respuesta del modelo ahora se transmite con streaming controlado y guardas de salida.
 - La UI ofrece retry para respuestas fallidas recuperables.
+- En la continuación del cierre técnico se incorporó NVIDIA como proveedor alternativo y luego activo.
+- Se detectó y corrigió un bug real de duplicación del stream SSE en el backend.
 
 ## Alcance del sprint
 
@@ -98,7 +100,7 @@ Llevar Travel2Chile desde un estado funcional y probado a un estado operable con
 ## Fuera de alcance
 
 - Rediseño visual mayor del chat.
-- Cambio de proveedor de IA.
+- Cambio profundo de producto más allá del proveedor.
 - Persistencia avanzada por perfil de viajero.
 - Analítica de negocio compleja o dashboards dedicados.
 
@@ -141,6 +143,7 @@ Llevar Travel2Chile desde un estado funcional y probado a un estado operable con
 
 ## Siguiente foco recomendado
 
-- Integración con monitoreo externo.
-- Reducción de `invalid_model_output` mediante mejor modelo o mejor routing.
+- Validación productiva de NVIDIA.
+- Reducción de latencia y tuning de `max_tokens`.
+- Decisión sobre fallback de proveedor.
 - Ajustes de memoria y continuidad conversacional.
