@@ -1,5 +1,5 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare'
-import { createChatStream, createErrorPayload, type ChatStreamPayload } from '@/lib/ai'
+import { createChatStream, createErrorPayload, resolveAIConfigFromEnv, type ChatStreamPayload } from '@/lib/ai'
 import { getOrCreateConversation, getHistory, saveMessage } from '@/lib/db'
 import { toIpHashHint, trackAppEvent } from '@/lib/observability'
 import { guardChatStream } from '@/lib/output-guard'
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   // Try to get CF bindings — available in production (Workers) but not in next dev
   let db: D1Database | null = null
   let kv: KVNamespace | null = null
-  const apiKey = process.env.OPENROUTER_API_KEY || ''
+  const aiConfig = resolveAIConfigFromEnv()
   const ip = request.headers.get('CF-Connecting-IP')
   const ipHashHint = toIpHashHint(ip)
   const streamDebugEnabled = request.headers.get('X-Travel2Chile-Stream-Debug') === '1'
@@ -101,25 +101,25 @@ export async function POST(request: Request) {
       conversationId,
       errorCode: 'domain_mismatch',
       retryable: false,
-      provider: 'openrouter',
+      provider: aiConfig.provider,
       hasBindings: Boolean(db || kv),
     })
     return createSseResponse(domainMismatchPayload, 400)
   }
 
-  if (!apiKey) {
+  if (!aiConfig.apiKey) {
     trackAppEvent('chat_provider_error', {
       sessionId,
       conversationId,
       errorCode: 'config_error',
       retryable: false,
-      provider: 'openrouter',
+      provider: aiConfig.provider,
       hasBindings: Boolean(db || kv),
     })
     return createSseResponse(
       createErrorPayload(
         'config_error',
-        'La API key de OpenRouter no está configurada.',
+        `La API key de ${aiConfig.provider === 'nvidia' ? 'NVIDIA' : 'OpenRouter'} no está configurada.`,
         false
       ),
       500
@@ -132,7 +132,7 @@ export async function POST(request: Request) {
     hasBindings: Boolean(db || kv),
   })
 
-  const guardedStream = guardChatStream(createChatStream(messages, apiKey, providerDebug), guardDebug)
+  const guardedStream = guardChatStream(createChatStream(messages, aiConfig, providerDebug), guardDebug)
   const [streamForClient, streamForSaving] = guardedStream.tee()
 
   if (db && conversationId) {
@@ -188,7 +188,7 @@ export async function POST(request: Request) {
           conversationId: convId,
           responseLength: full.length,
           hasBindings: true,
-          provider: 'openrouter',
+          provider: aiConfig.provider,
         })
       }
       if (hasError) {
@@ -197,7 +197,7 @@ export async function POST(request: Request) {
           conversationId: convId,
           errorCode: lastErrorCode ?? 'provider_error',
           retryable: lastRetryable ?? true,
-          provider: 'openrouter',
+          provider: aiConfig.provider,
           hasBindings: true,
         })
       }
@@ -252,7 +252,7 @@ export async function POST(request: Request) {
           conversationId,
           responseLength: full.length,
           hasBindings: false,
-          provider: 'openrouter',
+          provider: aiConfig.provider,
         })
       }
       if (hasError) {
@@ -261,7 +261,7 @@ export async function POST(request: Request) {
           conversationId,
           errorCode: lastErrorCode ?? 'provider_error',
           retryable: lastRetryable ?? true,
-          provider: 'openrouter',
+          provider: aiConfig.provider,
           hasBindings: false,
         })
       }

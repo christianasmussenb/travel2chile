@@ -47,6 +47,15 @@
 			"head_sampling_rate": 1
 		}
 	},
+	"vars": {
+		"AI_PROVIDER": "nvidia",
+		"NVIDIA_MODEL": "nvidia/nemotron-3-ultra-550b-a55b",
+		"NVIDIA_BASE_URL": "https://integrate.api.nvidia.com/v1",
+		"NVIDIA_MAX_TOKENS": "4096",
+		"NVIDIA_TEMPERATURE": "0.7",
+		"NVIDIA_TOP_P": "0.95",
+		"NVIDIA_ENABLE_THINKING": "0"
+	},
 	"upload_source_maps": true,
 	"d1_databases": [
 		{

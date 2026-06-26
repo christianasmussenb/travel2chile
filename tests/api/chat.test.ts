@@ -37,6 +37,8 @@ describe('POST /api/chat', () => {
   })
 
   afterEach(() => {
+    delete process.env.AI_PROVIDER
+    delete process.env.NVIDIA_API_KEY
     if (originalApiKey === undefined) {
       delete process.env.OPENROUTER_API_KEY
       return
@@ -74,6 +76,26 @@ describe('POST /api/chat', () => {
     const { text } = await readResponseChunks(response)
     expect(text).toContain('"type":"error"')
     expect(text).toContain('OpenRouter no está configurada')
+  })
+
+  it('returns a controlled error when NVIDIA is configured but its API key is missing', async () => {
+    process.env.OPENROUTER_API_KEY = ''
+    process.env.AI_PROVIDER = 'nvidia'
+    process.env.NVIDIA_API_KEY = ''
+
+    mocks.getCloudflareContext.mockRejectedValue(new Error('no bindings'))
+
+    const response = await POST(
+      new Request('http://localhost/api/chat', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ message: 'Hola', sessionId: 'session-no-nvidia-key' }),
+      })
+    )
+
+    expect(response.status).toBe(500)
+    const { text } = await readResponseChunks(response)
+    expect(text).toContain('NVIDIA no está configurada')
   })
 
   it('streams assistant text and persists the conversation when bindings exist', async () => {

@@ -16,7 +16,7 @@ Este documento define la verificación mínima para considerar estable a Travel2
 - API de chat.
 - API de historial.
 - Helpers de persistencia.
-- Integración con OpenRouter.
+- Integración con el proveedor de IA configurado (`OpenRouter` o `NVIDIA`).
 - Integración con D1 y KV cuando existan bindings reales.
 
 ## Criterios de aceptación
@@ -40,7 +40,7 @@ Este documento define la verificación mínima para considerar estable a Travel2
 
 ### 2. Sin API key
 
-- Entrada: `POST /api/chat` sin `OPENROUTER_API_KEY`.
+- Entrada: `POST /api/chat` sin la API key del proveedor activo.
 - Resultado esperado: error controlado en SSE y código `500`.
 
 ### 3. Streaming de respuesta

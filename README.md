@@ -25,7 +25,7 @@ Travel2Chile es un asistente de viajes en español enfocado en Chile. La aplicac
 - Chat: [`src/components/ChatInterface.tsx`](/Users/cab/VSCODE/travel2chile/src/components/ChatInterface.tsx).
 - API de chat: [`src/app/api/chat/route.ts`](/Users/cab/VSCODE/travel2chile/src/app/api/chat/route.ts).
 - API de historial: [`src/app/api/history/route.ts`](/Users/cab/VSCODE/travel2chile/src/app/api/history/route.ts).
-- IA: [`src/lib/ai.ts`](/Users/cab/VSCODE/travel2chile/src/lib/ai.ts), usando OpenRouter.
+- IA: [`src/lib/ai.ts`](/Users/cab/VSCODE/travel2chile/src/lib/ai.ts), con soporte para OpenRouter y NVIDIA.
 - Guardas de dominio y salida: [`src/lib/domain-guard.ts`](/Users/cab/VSCODE/travel2chile/src/lib/domain-guard.ts), [`src/lib/output-guard.ts`](/Users/cab/VSCODE/travel2chile/src/lib/output-guard.ts).
 - Persistencia: [`src/lib/db.ts`](/Users/cab/VSCODE/travel2chile/src/lib/db.ts) sobre D1.
 - Observabilidad de app: [`src/lib/observability.ts`](/Users/cab/VSCODE/travel2chile/src/lib/observability.ts).
@@ -48,12 +48,22 @@ Travel2Chile es un asistente de viajes en español enfocado en Chile. La aplicac
 
 - Node.js 20 o superior.
 - npm.
-- Una API key válida en `OPENROUTER_API_KEY`.
+- Una API key válida del proveedor configurado.
 - Cloudflare bindings para D1 y KV si se quiere persistencia/rate limit reales.
 
 ## Variables de entorno
 
-- `OPENROUTER_API_KEY`: obligatoria para responder mensajes.
+- `AI_PROVIDER`: opcional. `openrouter` por defecto, o `nvidia`.
+- `OPENROUTER_API_KEY`: obligatoria si `AI_PROVIDER=openrouter`.
+- `OPENROUTER_MODEL`: opcional. Por defecto `openrouter/free`.
+- `NVIDIA_API_KEY`: obligatoria si `AI_PROVIDER=nvidia`.
+- `NVIDIA_MODEL`: opcional. Por defecto `nvidia/nemotron-3-ultra-550b-a55b`.
+- `NVIDIA_BASE_URL`: opcional. Por defecto `https://integrate.api.nvidia.com/v1`.
+- `NVIDIA_MAX_TOKENS`: opcional. Por defecto `4096`.
+- `NVIDIA_TEMPERATURE`: opcional. Por defecto `0.7`.
+- `NVIDIA_TOP_P`: opcional. Por defecto `0.95`.
+- `NVIDIA_ENABLE_THINKING`: opcional. `1` para habilitar reasoning del endpoint de NVIDIA.
+- `NVIDIA_REASONING_BUDGET`: opcional. Solo aplica si `NVIDIA_ENABLE_THINKING=1`.
 - `NEXTJS_ENV`: opcional, usada por el runtime de OpenNext/Cloudflare.
 - `CLOUDFLARE_WEB_ANALYTICS_TOKEN`: opcional, habilita Web Analytics de Cloudflare en el frontend.
 
@@ -79,7 +89,16 @@ npm install
 Crear un archivo `.env.local` con al menos:
 
 ```bash
+AI_PROVIDER=openrouter
 OPENROUTER_API_KEY=tu_clave
+```
+
+Para probar NVIDIA:
+
+```bash
+AI_PROVIDER=nvidia
+NVIDIA_API_KEY=tu_clave
+NVIDIA_MODEL=nvidia/nemotron-3-ultra-550b-a55b
 ```
 
 Luego ejecutar:
@@ -95,7 +114,7 @@ Abrir `http://localhost:3000`.
 - La UI del chat funciona.
 - La respuesta se muestra en streaming mientras llega, con detección de errores y salidas inválidas.
 - Si no hay bindings reales de Cloudflare, el historial y el rate limit quedan desactivados o en modo no-op.
-- La aplicación sigue respondiendo mientras exista `OPENROUTER_API_KEY`.
+- La aplicación sigue respondiendo mientras exista la API key del proveedor configurado.
 
 ## Preview y despliegue
 
@@ -116,11 +135,24 @@ npx wrangler login
 - KV para `travel2chile_kv`
 - R2 para `travel2chile_images`
 
-3. Carga el secreto de OpenRouter en Cloudflare:
+3. Carga el secreto del proveedor en Cloudflare:
 
 ```bash
 npx wrangler secret put OPENROUTER_API_KEY
 ```
+
+Si usas NVIDIA:
+
+```bash
+npx wrangler secret put NVIDIA_API_KEY
+```
+
+La configuración productiva del repositorio ya deja `AI_PROVIDER=nvidia` y el modelo `nvidia/nemotron-3-ultra-550b-a55b` en [`wrangler.jsonc`](/Users/cab/VSCODE/travel2chile/wrangler.jsonc). Para producción solo falta cargar `NVIDIA_API_KEY` como secreto en Cloudflare.
+
+Para desarrollo local puedes partir desde:
+
+- [\.env.example](/Users/cab/VSCODE/travel2chile/.env.example)
+- [\.dev.vars.example](/Users/cab/VSCODE/travel2chile/.dev.vars.example)
 
 4. Si quieres ver métricas de navegación en Cloudflare Web Analytics, agrega el token público como variable de entorno `CLOUDFLARE_WEB_ANALYTICS_TOKEN`.
 
@@ -167,11 +199,12 @@ El esquema completo está en [`db/schema.sql`](/Users/cab/VSCODE/travel2chile/db
 
 ## Limitaciones actuales
 
-- Sin `OPENROUTER_API_KEY` no hay respuesta de IA.
+- Sin la API key del proveedor configurado no hay respuesta de IA.
 - En `next dev`, si no están disponibles los bindings de Cloudflare, no hay persistencia de historial ni rate limit.
 - La persistencia es por sesión y tiene una ventana de reutilización de 24 horas para conversaciones activas.
 - El rate limit solo se aplica cuando KV está disponible.
 - La calidad final sigue dependiendo del modelo upstream; el sistema ahora bloquea muchas respuestas malas, pero no convierte un modelo débil en uno excelente.
+- Si activas `NVIDIA_ENABLE_THINKING=1`, aumentan el tamaño y el riesgo de salidas incompatibles con este chat; por eso producción queda con `0`.
 
 ## Pruebas y verificación
 

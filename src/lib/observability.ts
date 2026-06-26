@@ -14,7 +14,7 @@ type AppEventData = {
   responseLength?: number
   errorCode?: string
   retryable?: boolean
-  provider?: 'openrouter'
+  provider?: 'openrouter' | 'nvidia'
   hasBindings?: boolean
   ipHashHint?: string
 }

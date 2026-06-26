@@ -10,6 +10,10 @@ interface Message {
   content: string
 }
 
+type ChatInterfaceProps = {
+  aiStatusLabel?: string
+}
+
 type ChatEvent =
   | { type: 'text'; text: string; seq?: number }
   | { type: 'error'; code: string; message: string; retryable: boolean; seq?: number }
@@ -65,7 +69,7 @@ function isStreamDebugEnabled() {
   return params.get('streamDebug') === '1' || localStorage.getItem('t2c_stream_debug') === '1'
 }
 
-export default function ChatInterface() {
+export default function ChatInterface({ aiStatusLabel }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
@@ -620,6 +624,20 @@ export default function ChatInterface() {
           <p style={{ textAlign: 'center', fontSize: 12, color: '#94A3B8', marginTop: 10, lineHeight: 1.5 }}>
             Presiona Enter para enviar · Shift+Enter para nueva línea · Respuestas de IA pueden variar
           </p>
+          {aiStatusLabel ? (
+            <p
+              style={{
+                textAlign: 'center',
+                fontSize: 12,
+                color: '#64748B',
+                marginTop: 6,
+                lineHeight: 1.5,
+                letterSpacing: '0.1px',
+              }}
+            >
+              {aiStatusLabel}
+            </p>
+          ) : null}
           {canRetryLastAnswer ? (
             <div style={{ display: 'flex', justifyContent: 'center', marginTop: 10 }}>
               <button

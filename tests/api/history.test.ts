@@ -11,9 +11,13 @@ vi.mock('@opennextjs/cloudflare', () => ({
   getCloudflareContext: mocks.getCloudflareContext,
 }))
 
-vi.mock('@/lib/ai', () => ({
-  createChatStream: mocks.createChatStream,
-}))
+vi.mock('@/lib/ai', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/ai')>()
+  return {
+    ...actual,
+    createChatStream: mocks.createChatStream,
+  }
+})
 
 vi.mock('@/lib/observability', () => ({
   trackAppEvent: mocks.trackAppEvent,
@@ -34,6 +38,8 @@ describe('GET and DELETE /api/history', () => {
   })
 
   afterEach(() => {
+    delete process.env.AI_PROVIDER
+    delete process.env.NVIDIA_API_KEY
     if (originalApiKey === undefined) {
       delete process.env.OPENROUTER_API_KEY
       return

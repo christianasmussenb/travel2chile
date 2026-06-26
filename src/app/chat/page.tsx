@@ -1,4 +1,5 @@
 import ChatInterface from '@/components/ChatInterface'
+import { getPublicAIStatusLabel } from '@/lib/ai'
 
 export const metadata = {
   title: 'Travel2Chile — Chat con IA',
@@ -6,5 +7,5 @@ export const metadata = {
 }
 
 export default function ChatPage() {
-  return <ChatInterface />
+  return <ChatInterface aiStatusLabel={getPublicAIStatusLabel()} />
 }

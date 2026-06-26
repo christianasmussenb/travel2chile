@@ -47,8 +47,9 @@ _Actualizado al 24 de junio de 2026._
 
 ## Operación
 
-- Sin `OPENROUTER_API_KEY` el sistema no puede responder, así que ese secreto debe tratarse como requisito de despliegue.
+- Sin la API key del proveedor activo el sistema no puede responder, así que ese secreto debe tratarse como requisito de despliegue.
 - En local sin bindings, la experiencia sigue siendo útil, pero no hay persistencia ni rate limit reales.
 - Documentar explícitamente estas diferencias reduce tiempo perdido en debugging de entorno.
 - Tener deploy automatizado reduce el costo operativo, pero no reemplaza la validación manual en el entorno real después de cambios de guardas o del flujo del modelo.
 - Cuando hay errores recuperables del modelo, ofrecer un retry explícito en UI es mejor que dejar al usuario reescribir el prompt.
+- Para este producto, conviene dejar el “thinking” de proveedores reasoning-capable apagado por defecto en producción si la UX depende de respuestas limpias y cortas por streaming.

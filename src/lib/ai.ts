@@ -23,6 +23,22 @@ export interface Message {
   content: string
 }
 
+export type AIProvider = 'openrouter' | 'nvidia'
+
+export type AIConfig = {
+  provider: AIProvider
+  apiKey: string
+  model: string
+  baseURL: string
+  referer?: string
+  title?: string
+  temperature?: number
+  topP?: number
+  maxTokens?: number
+  enableThinking?: boolean
+  reasoningBudget?: number
+}
+
 export type ChatErrorCode =
   | 'config_error'
   | 'domain_mismatch'
@@ -104,13 +120,77 @@ function classifyProviderError(error: unknown) {
   )
 }
 
-export function createChatStream(messages: Message[], apiKey: string, debug?: StreamDebugContext): ReadableStream {
+function classifyProviderErrorWithConfig(error: unknown, config: AIConfig) {
+  const providerName = config.provider === 'nvidia' ? 'NVIDIA' : 'OpenRouter'
+  const payload = classifyProviderError(error)
+
+  if (payload.code === 'provider_rate_limit') {
+    return {
+      ...payload,
+      message: `${providerName} alcanzó su límite temporal. Intenta nuevamente en unos minutos.`,
+    } satisfies typeof payload
+  }
+
+  if (payload.code === 'provider_timeout') {
+    return {
+      ...payload,
+      message: `${providerName} tardó demasiado en responder. Intenta nuevamente.`,
+    } satisfies typeof payload
+  }
+
+  if (payload.code === 'provider_error') {
+    return {
+      ...payload,
+      message: `${providerName} no pudo generar una respuesta en este momento.`,
+    } satisfies typeof payload
+  }
+
+  return payload
+}
+
+export function resolveAIConfigFromEnv(env = process.env): AIConfig {
+  const provider = (env.AI_PROVIDER || 'openrouter').toLowerCase() as AIProvider
+
+  if (provider === 'nvidia') {
+    return {
+      provider: 'nvidia',
+      apiKey: env.NVIDIA_API_KEY || '',
+      model: env.NVIDIA_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b',
+      baseURL: env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1',
+      title: 'Travel2Chile',
+      maxTokens: Number(env.NVIDIA_MAX_TOKENS || 4096),
+      temperature: Number(env.NVIDIA_TEMPERATURE || 0.7),
+      topP: Number(env.NVIDIA_TOP_P || 0.95),
+      enableThinking: env.NVIDIA_ENABLE_THINKING === '1',
+      reasoningBudget: Number(env.NVIDIA_REASONING_BUDGET || 0),
+    }
+  }
+
+  return {
+    provider: 'openrouter',
+    apiKey: env.OPENROUTER_API_KEY || '',
+    model: env.OPENROUTER_MODEL || 'openrouter/free',
+    baseURL: env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
+    referer: 'https://travel2chile.com',
+    title: 'Travel2Chile',
+    maxTokens: Number(env.OPENROUTER_MAX_TOKENS || 1024),
+  }
+}
+
+export function getPublicAIStatusLabel(env = process.env) {
+  const config = resolveAIConfigFromEnv(env)
+  const providerLabel = config.provider === 'nvidia' ? 'NVIDIA' : 'OpenRouter'
+  const modelLabel = config.model.replace(/^nvidia\//, '').replace(/^openrouter\//, '')
+  return `Servicio: ${providerLabel} · Modelo: ${modelLabel}`
+}
+
+export function createChatStream(messages: Message[], config: AIConfig, debug?: StreamDebugContext): ReadableStream {
   const client = new OpenAI({
-    apiKey,
-    baseURL: 'https://openrouter.ai/api/v1',
+    apiKey: config.apiKey,
+    baseURL: config.baseURL,
     defaultHeaders: {
-      'HTTP-Referer': 'https://travel2chile.com',
-      'X-Title': 'Travel2Chile',
+      ...(config.referer ? { 'HTTP-Referer': config.referer } : {}),
+      ...(config.title ? { 'X-Title': config.title } : {}),
     },
   })
 
@@ -119,16 +199,30 @@ export function createChatStream(messages: Message[], apiKey: string, debug?: St
       try {
         logStreamDebug(debug, 'provider_request_started', {
           messageCount: messages.length,
+          provider: config.provider,
+          model: config.model,
         })
 
         const stream = await client.chat.completions.create({
-          model: 'openrouter/free',
-          max_tokens: 1024,
+          model: config.model,
+          max_tokens: config.maxTokens,
+          ...(config.temperature !== undefined ? { temperature: config.temperature } : {}),
+          ...(config.topP !== undefined ? { top_p: config.topP } : {}),
           stream: true,
           messages: [
             { role: 'system', content: SYSTEM_PROMPT },
             ...messages.map((m) => ({ role: m.role, content: m.content })),
           ],
+          ...(config.provider === 'nvidia'
+            ? {
+                extra_body: {
+                  ...(config.enableThinking ? { chat_template_kwargs: { enable_thinking: true } } : {}),
+                  ...(config.enableThinking && config.reasoningBudget
+                    ? { reasoning_budget: config.reasoningBudget }
+                    : {}),
+                },
+              }
+            : {}),
         })
 
         for await (const chunk of stream) {
@@ -150,7 +244,7 @@ export function createChatStream(messages: Message[], apiKey: string, debug?: St
         logStreamDebug(debug, 'provider_stream_error', {
           error: error instanceof Error ? error.message : String(error),
         })
-        controller.enqueue(encodeSseChunk(classifyProviderError(error)))
+        controller.enqueue(encodeSseChunk(classifyProviderErrorWithConfig(error, config)))
         controller.enqueue(encodeSseChunk('[DONE]'))
         controller.close()
       }
