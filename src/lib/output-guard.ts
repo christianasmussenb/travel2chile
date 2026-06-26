@@ -114,6 +114,20 @@ function looksRepeatedOrRestarted(text: string) {
     if (nextIndex !== -1) return true
   }
 
+  const compact = normalized.replace(/\s+/g, ' ').trim()
+  if (compact.length >= 240) {
+    const recentWindow = compact.slice(-180)
+    const windowStart = recentWindow.length >= 120 ? recentWindow.slice(0, 120) : recentWindow
+
+    if (windowStart.length >= 80) {
+      const previousIndex = compact.indexOf(windowStart)
+      const latestIndex = compact.lastIndexOf(windowStart)
+      if (previousIndex !== -1 && latestIndex !== -1 && latestIndex - previousIndex >= windowStart.length) {
+        return true
+      }
+    }
+  }
+
   return false
 }
 

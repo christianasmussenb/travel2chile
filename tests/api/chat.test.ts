@@ -473,4 +473,52 @@ describe('POST /api/chat', () => {
       },
     ])
   })
+
+  it('blocks a partial table restart inside a long budget answer', async () => {
+    const db = new MockD1Database()
+    const kv = new MockKVNamespace()
+
+    mocks.getCloudflareContext.mockResolvedValue({
+      env: {
+        travel2chile_db: db,
+        travel2chile_kv: kv,
+      },
+    })
+    mocks.createChatStream.mockReturnValue(
+      createSseStream([
+        'data: {"type":"text","text":"¡Claro! Con 7 días y un presupuesto ajustado, lo ideal es concentrarse en la zona central de Chile.\\n\\nItinerario sugerido\\n\\nDía 1 Llegada a Santiago.\\nDía 2 Valle de Casablanca.\\nDía 3 Viaje a Valparaíso.\\nDía 4 Explora Viña del Mar. "}\n\n',
+        'data: {"type":"text","text":"Bus local $4 USD y la ruta del vino). Aquí tienes una propuesta práctica y económica:\\nItinerario sugerido\\n\\nDía 1 Llegada a Santiago.\\nDía 2 Valle de Casablanca.\\nDía 3 Viaje a Valparaíso.\\nDía 4 Explora Viña del Mar. "}\n\n',
+        'data: [DONE]\n\n',
+      ])
+    )
+
+    const response = await POST(
+      new Request('http://localhost/api/chat', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'CF-Connecting-IP': '127.0.0.1',
+        },
+        body: JSON.stringify({
+          message: 'Presupuesto 7 días en Chile',
+          sessionId: 'session-budget-table-restart',
+        }),
+      })
+    )
+
+    expect(response.status).toBe(200)
+    const { text } = await readResponseChunks(response)
+    expect(text).toContain('"code":"invalid_model_output"')
+
+    await waitFor(() => db.messages.length >= 1)
+    expect(db.messages).toEqual([
+      {
+        id: expect.any(String),
+        conversation_id: expect.any(String),
+        role: 'user',
+        content: 'Presupuesto 7 días en Chile',
+        created_at: expect.any(String),
+      },
+    ])
+  })
 })
